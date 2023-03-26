@@ -31,9 +31,9 @@
 #pragma once
 
 #include "raylib.h"
-
 #include "imgui.h"
 
+#define NO_FONT_AWESOME
 #ifndef NO_FONT_AWESOME
 #include "extras/IconsFontAwesome6.h"
 #define FONT_AWESOME_ICON_SIZE 11

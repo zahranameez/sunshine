@@ -1,6 +1,9 @@
 #include "raylib.h"
 #include "math.h"
 
+#include "imgui.h"
+#include "rlImGui.h"
+
 #include <string>
 #include <cstdio>
 
@@ -92,7 +95,8 @@ int main(void)
 {
     const int screenWidth = 1280;
     const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight, "Steering Example");
+    InitWindow(screenWidth, screenHeight, "Sunshine");
+    rlImGuiSetup(true);
 
     string assets = "../game/assets";
     Model plane = LoadModel((assets + "/models/plane.obj").c_str());
@@ -128,6 +132,7 @@ int main(void)
     testTransform.rotation = FromEuler(0.0f, 0.0f, 0.0f);
     testTransform.scale = Vector3One();
 
+    bool demoGUI = true;
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
@@ -160,6 +165,14 @@ int main(void)
         ClearBackground(RAYWHITE);
         DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
 
+        if (IsKeyPressed(KEY_GRAVE)) demoGUI = !demoGUI;
+        if (demoGUI)
+        {
+            rlImGuiBegin();
+            ImGui::ShowDemoWindow(nullptr);
+            rlImGuiEnd();
+        }
+
         BeginMode3D(camera);
             plane.transform = seekerTransform;
             DrawModel(plane, Vector3Zero(), 1.0f, WHITE);
@@ -176,6 +189,7 @@ int main(void)
     }
 
     UnloadModel(plane);
+    rlImGuiShutdown();
     CloseWindow();
 
     return 0;

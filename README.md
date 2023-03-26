@@ -5,5 +5,5 @@ Sunshine uses Raylib and ImGui as libraries. The following links are very useful
 [Raylib Cheatsheet](https://www.raylib.com/cheatsheet/cheatsheet.html)
 [Raylib Source Code](https://github.com/raysan5/raylib)
 
-[ImGui Homepage](https://www.dearimgui.org/))
+[ImGui Homepage](https://www.dearimgui.org/)
 [ImGui Source Code](https://github.com/ocornut/imgui)
