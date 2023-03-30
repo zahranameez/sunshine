@@ -161,6 +161,19 @@ RMAPI Vector2 Vector2One(void)
     return result;
 }
 
+RMAPI Vector3 ToV3(Vector2 v)
+{
+    Vector3 result = { v.x, v.y, 0.0f };
+
+    return result;
+}
+
+RMAPI Vector2 FromV3(Vector3 v)
+{
+    Vector2 result = { v.x, v.y };
+
+    return result;
+}
 
 // Add two vectors (v1 + v2)
 RMAPI Vector2 Add(Vector2 v1, Vector2 v2)
@@ -233,6 +246,13 @@ RMAPI float DistanceSqr(Vector2 v1, Vector2 v2)
     return result;
 }
 
+RMAPI Vector2 Direction(float angle)
+{
+    Vector2 result = { cosf(angle), sinf(angle) };
+
+    return result;
+}
+
 // Calculate angle between two vectors
 // NOTE: Angle is calculated from origin point (0, 0)
 RMAPI float Angle(Vector2 v1, Vector2 v2)
@@ -265,6 +285,21 @@ RMAPI Vector2 Scale(Vector2 v, float scale)
     Vector2 result = { v.x * scale, v.y * scale };
 
     return result;
+}
+
+// Project v1 onto v2
+RMAPI Vector2 Project(Vector2 v1, Vector2 v2)
+{
+    float t = Dot(v1, v2) / Dot(v2, v2);
+    return { t * v2.x, t * v2.y };
+}
+
+// Returns the point on line AB nearest to point P
+RMAPI Vector2 NearestPoint(Vector2 A, Vector2 B, Vector2 P)
+{
+    Vector2 AB = Subtract(B, A);
+    float t = Dot(Subtract(P, A), AB) / Dot(AB, AB);
+    return Add(A, Scale(AB, Clamp(t, 0.0f, 1.0f)));
 }
 
 // Multiply vector by vector
@@ -588,6 +623,21 @@ RMAPI float DistanceSqr(Vector3 v1, Vector3 v2)
     result = dx * dx + dy * dy + dz * dz;
 
     return result;
+}
+
+// Project v1 onto v2
+RMAPI Vector3 Project(Vector3 v1, Vector3 v2)
+{
+    float t = Dot(v1, v2) / Dot(v2, v2);
+    return { t * v2.x, t * v2.y, t * v2.z };
+}
+
+// Returns the point on line AB nearest to point P
+RMAPI Vector3 NearestPoint(Vector3 A, Vector3 B, Vector3 P)
+{
+    Vector3 AB = Subtract(B, A);
+    float t = Dot(Subtract(P, A), AB) / Dot(AB, AB);
+    return Add(A, Scale(AB, Clamp(t, 0.0f, 1.0f)));
 }
 
 // Calculate angle between two vectors
