@@ -7,9 +7,23 @@ struct Rigidbody
     Vector2 acc{ 0.0f, 0.0f };
 };
 
+struct Rigidbody3
+{
+    Vector3 vel{ 0.0f, 0.0f, 0.0f };
+    Vector3 acc{ 0.0f, 0.0f, 0.0f };
+};
+
 // v2 = v1 + a(t)
 // p2 = p1 + v2(t) + 0.5a(t^2)
 Vector2 Integrate(const Vector2& pos, Rigidbody& rb, float dt)
+{
+    rb.vel = rb.vel + rb.acc * dt;
+    return pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
+}
+
+// v2 = v1 + a(t)
+// p2 = p1 + v2(t) + 0.5a(t^2)
+Vector3 Integrate(const Vector3& pos, Rigidbody3& rb, float dt)
 {
     rb.vel = rb.vel + rb.acc * dt;
     return pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
@@ -29,6 +43,20 @@ Vector2 Decelerate(
     return Negate(Normalize(seekerVelocity)) * a;
 }
 
+// vf^2 = vi^2 + 2a(d)
+// 0^2 = vi^2 + 2a(d)
+// -vi^2 / 2d = a
+Vector3 Decelerate(
+    const Vector3& targetPosition,
+    const Vector3& seekerPosition,
+    const Vector3& seekerVelocity)
+{
+    float d = Length(targetPosition - seekerPosition);
+    float a = Dot(seekerVelocity, seekerVelocity) / (d * 2.0f);
+
+    return Negate(Normalize(seekerVelocity)) * a;
+}
+
 // Accelerate towards target
 Vector2 Seek(
     const Vector2& targetPosition,
@@ -36,5 +64,15 @@ Vector2 Seek(
     const Vector2& seekerVelocity, float maxSpeed)
 {
     Vector2 desiredVelocity = Normalize(targetPosition - seekerPosition) * maxSpeed;
+    return desiredVelocity - seekerVelocity;
+}
+
+// Accelerate towards target
+Vector3 Seek(
+    const Vector3& targetPosition,
+    const Vector3& seekerPosition,
+    const Vector3& seekerVelocity, float maxSpeed)
+{
+    Vector3 desiredVelocity = Normalize(targetPosition - seekerPosition) * maxSpeed;
     return desiredVelocity - seekerVelocity;
 }
