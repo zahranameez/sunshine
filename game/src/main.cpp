@@ -10,6 +10,10 @@
 
 using namespace std;
 
+#define VISIBILITY_NONE 1
+#define VISIBILITY_PLAYER 2
+#define VISIBILITY_TARGET 4
+
 int main(void)
 {
     const int screenWidth = 1280;
@@ -27,15 +31,17 @@ int main(void)
     }
     inFile.close();
 
-    const int gridLength = 80;
-    const float tileWidth = screenWidth / gridLength;
-    const float tileHeight = screenHeight / gridLength;
-    array<Vector2, gridLength * gridLength> visibilityTiles;
+    const size_t gridLength = 80;
+    const size_t gridLengthSqr = gridLength * gridLength;
+    const int tileWidth = screenWidth / gridLength;
+    const int tileHeight = screenHeight / gridLength;
+    array<Vector2, gridLengthSqr> visibilityTiles;
+    array<int, gridLengthSqr> visibilityFlags;
     for (size_t i = 0; i < gridLength; i++)
     {
         for (size_t j = 0; j < gridLength; j++)
         {
-            visibilityTiles[i * gridLength + j] = { j * tileWidth, i * tileHeight };
+            visibilityTiles[i * gridLength + j] = { float(j * tileWidth), float(i * tileHeight) };
         }
     }
 
@@ -92,16 +98,20 @@ int main(void)
         if (useLOS)
         {
             const int alpha = 96;
-            for (const Vector2& tilePosition : visibilityTiles)
+            for (size_t i = 0; i < gridLengthSqr; i++)
             {
+                Vector2 tilePosition = visibilityTiles[i];
                 Vector2 tileCenter{ tilePosition.x + tileWidth * 0.5f, tilePosition.y + tileHeight * 0.5f };
-                bool targetVisible = IsCircleVisible(tileCenter, target.position, target, obstacles);
-                bool playerVisible = IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles);
-                Color color;
-                if (targetVisible && playerVisible) color = GREEN;
-                else if (playerVisible) color = BLUE;
-                else if (targetVisible) color = PURPLE;
-                else color = BLACK;
+
+                int visibility = VISIBILITY_NONE;
+                visibility <<= IsCircleVisible(tileCenter, target.position, target, obstacles);
+                visibility <<= IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles);
+                visibilityFlags[i] = visibility;
+
+                Color color = BLACK;
+                if (visibility == (VISIBILITY_TARGET | VISIBILITY_PLAYER)) color = GREEN;
+                else if (visibility == VISIBILITY_TARGET) color = PURPLE;
+                else if (visibility == VISIBILITY_PLAYER) color = BLUE;
                 color.a = alpha;
                 DrawRectangle(tilePosition.x, tilePosition.y, tileWidth, tileHeight, color);
             }
@@ -161,6 +171,7 @@ int main(void)
             rlImGuiEnd();
         }
 
+        DrawFPS(10, 10);
         EndDrawing();
     }
 
