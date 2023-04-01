@@ -10,9 +10,9 @@
 
 using namespace std;
 
-#define VISIBILITY_NONE 1
-#define VISIBILITY_PLAYER 2
-#define VISIBILITY_TARGET 4
+#define VISIBILITY_NONE 0
+#define VISIBILITY_PLAYER 1
+#define VISIBILITY_TARGET 2
 
 int main(void)
 {
@@ -33,17 +33,9 @@ int main(void)
 
     const size_t gridLength = 80;
     const size_t gridLengthSqr = gridLength * gridLength;
+    array<int, gridLengthSqr> visibilityFlags;
     const int tileWidth = screenWidth / gridLength;
     const int tileHeight = screenHeight / gridLength;
-    array<Vector2, gridLengthSqr> visibilityTiles;
-    array<int, gridLengthSqr> visibilityFlags;
-    for (size_t i = 0; i < gridLength; i++)
-    {
-        for (size_t j = 0; j < gridLength; j++)
-        {
-            visibilityTiles[i * gridLength + j] = { float(j * tileWidth), float(i * tileHeight) };
-        }
-    }
 
     float playerRotation = 0.0f;
     const float playerWidth = 60.0f;
@@ -91,34 +83,59 @@ int main(void)
         const Color recMarkerColor = rectangleVisible ? DARKGREEN : RED;
         const Color circleMarkerColor =  circleVisible ? DARKGREEN : RED;
 
+        if (useLOS)
+        {
+            for (size_t i = 0; i < gridLengthSqr; i++)
+            {
+                size_t col = i % gridLength;
+                size_t row = i / gridLength;
+                Vector2 tilePosition{ col * tileWidth, row * tileHeight };
+                Vector2 tileCenter = tilePosition + Vector2{ tileWidth * 0.5f, tileHeight * 0.5f };
+
+                int visibility = VISIBILITY_NONE;
+                if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
+                    visibility |= VISIBILITY_PLAYER;
+                if (IsCircleVisible(tileCenter, target.position, target, obstacles))
+                    visibility |= VISIBILITY_TARGET;
+                visibilityFlags[i] = visibility;
+            }
+        }
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        // Render visibility tiles
         if (useLOS)
         {
             const int alpha = 96;
+
+            // Render visibility tiles
             for (size_t i = 0; i < gridLengthSqr; i++)
             {
-                Vector2 tilePosition = visibilityTiles[i];
-                Vector2 tileCenter{ tilePosition.x + tileWidth * 0.5f, tilePosition.y + tileHeight * 0.5f };
-
-                int visibility = VISIBILITY_NONE;
-                visibility <<= IsCircleVisible(tileCenter, target.position, target, obstacles);
-                visibility <<= IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles);
-                visibilityFlags[i] = visibility;
+                size_t col = i % gridLength;
+                size_t row = i / gridLength;
+                Vector2 tilePosition{ col * tileWidth, row * tileHeight };
 
                 Color color = BLACK;
-                if (visibility == (VISIBILITY_TARGET | VISIBILITY_PLAYER)) color = GREEN;
-                else if (visibility == VISIBILITY_TARGET) color = PURPLE;
-                else if (visibility == VISIBILITY_PLAYER) color = BLUE;
+                switch (visibilityFlags[i])
+                {
+                case VISIBILITY_PLAYER | VISIBILITY_TARGET:
+                    color = GREEN;
+                    break;
+                case VISIBILITY_PLAYER:
+                    color = BLUE;
+                    break;
+                case VISIBILITY_TARGET:
+                    color = PURPLE;
+                    break;
+                }
                 color.a = alpha;
                 DrawRectangle(tilePosition.x, tilePosition.y, tileWidth, tileHeight, color);
             }
 
+            // Render target
             DrawCircleV(target.position, target.radius, PURPLE);
 
-            // Legend
+            // Reender legend
             if (useGUI)
             {
                 Color both = GREEN;
@@ -140,16 +157,17 @@ int main(void)
         DrawLine(playerPosition.x, playerPosition.y, playerEnd.x, playerEnd.y, BLUE);
         DrawCircleV(playerPosition, 10.0f, BLACK);
 
-        // Render geometry
+        // Render obstacles (occluders)
         for (const Rectangle& obstacle : obstacles)
             DrawRectangleRec(obstacle, GREEN);
 
-        // Render labels
         if (usePOI)
         {
+            // Render collision shapes
             DrawRectangleRec(rectangle, rectangleVisible ? GREEN : RED);
             DrawCircleV(circle.position, circle.radius, circleVisible ? GREEN : RED);
 
+            // Render labels & markers
             DrawText(circleText, nearestCirclePoint.x - circleTextWidth * 0.5f, nearestCirclePoint.y - fontSize * 2, fontSize, BLACK);
             DrawCircleV(nearestRecPoint, 10.0f, recMarkerColor);
             DrawText(recText, nearestRecPoint.x - recTextWidth * 0.5f, nearestRecPoint.y - fontSize * 2, fontSize, BLACK);
