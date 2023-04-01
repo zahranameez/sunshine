@@ -14,12 +14,29 @@ using namespace std;
 #define VISIBILITY_PLAYER 1
 #define VISIBILITY_TARGET 2
 
+#define GRID_LENGTH 80
+#define GRID_LENGTH_SQR GRID_LENGTH * GRID_LENGTH
+
+struct Tiles
+{
+    array<Vector2, GRID_LENGTH_SQR> position{};
+    array<int, GRID_LENGTH_SQR> visibility{};
+};
+
 int main(void)
 {
     const int screenWidth = 1280;
     const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight, "Sunshine");
-    rlImGuiSetup(true);
+    const int tileWidth = screenWidth / GRID_LENGTH;
+    const int tileHeight = screenHeight / GRID_LENGTH;
+
+    Tiles tiles;
+    for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
+    {
+        size_t col = i % GRID_LENGTH;
+        size_t row = i / GRID_LENGTH;
+        tiles.position[i] = { float(col * tileWidth), float(row * tileHeight) };
+    }
 
     vector<Rectangle> obstacles;
     std::ifstream inFile("../game/assets/data/obstacles.txt");
@@ -30,12 +47,6 @@ int main(void)
         obstacles.push_back(obstacle);
     }
     inFile.close();
-
-    const size_t gridLength = 80;
-    const size_t gridLengthSqr = gridLength * gridLength;
-    array<int, gridLengthSqr> visibilityFlags;
-    const int tileWidth = screenWidth / gridLength;
-    const int tileHeight = screenHeight / gridLength;
 
     float playerRotation = 0.0f;
     const float playerWidth = 60.0f;
@@ -58,6 +69,8 @@ int main(void)
     bool usePOI = false; // show nearest point of intersection, nearest circle, and nearest rectangle points
     bool useLOS = false; // show if player & target, only player, only target, or nothing is visible
     bool useGUI = false;
+    InitWindow(screenWidth, screenHeight, "Sunshine");
+    rlImGuiSetup(true);
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
@@ -85,19 +98,14 @@ int main(void)
 
         if (useLOS)
         {
-            for (size_t i = 0; i < gridLengthSqr; i++)
+            for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
             {
-                size_t col = i % gridLength;
-                size_t row = i / gridLength;
-                Vector2 tilePosition{ col * tileWidth, row * tileHeight };
-                Vector2 tileCenter = tilePosition + Vector2{ tileWidth * 0.5f, tileHeight * 0.5f };
-
-                int visibility = VISIBILITY_NONE;
+                Vector2 tileCenter = tiles.position[i] + Vector2{ tileWidth * 0.5f, tileHeight * 0.5f };
+                tiles.visibility[i] = VISIBILITY_NONE;
                 if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
-                    visibility |= VISIBILITY_PLAYER;
+                    tiles.visibility[i] |= VISIBILITY_PLAYER;
                 if (IsCircleVisible(tileCenter, target.position, target, obstacles))
-                    visibility |= VISIBILITY_TARGET;
-                visibilityFlags[i] = visibility;
+                    tiles.visibility[i] |= VISIBILITY_TARGET;
             }
         }
 
@@ -106,17 +114,12 @@ int main(void)
 
         if (useLOS)
         {
-            const int alpha = 96;
-
             // Render visibility tiles
-            for (size_t i = 0; i < gridLengthSqr; i++)
+            const int tileAlpha = 96;
+            for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
             {
-                size_t col = i % gridLength;
-                size_t row = i / gridLength;
-                Vector2 tilePosition{ col * tileWidth, row * tileHeight };
-
                 Color color = BLACK;
-                switch (visibilityFlags[i])
+                switch (tiles.visibility[i])
                 {
                 case VISIBILITY_PLAYER | VISIBILITY_TARGET:
                     color = GREEN;
@@ -128,20 +131,20 @@ int main(void)
                     color = PURPLE;
                     break;
                 }
-                color.a = alpha;
-                DrawRectangle(tilePosition.x, tilePosition.y, tileWidth, tileHeight, color);
+                color.a = tileAlpha;
+                DrawRectangleV(tiles.position[i], { tileWidth, tileHeight }, color);
             }
 
             // Render target
             DrawCircleV(target.position, target.radius, PURPLE);
 
-            // Reender legend
+            // Render legend
             if (useGUI)
             {
                 Color both = GREEN;
                 Color player = BLUE;
                 Color target = PURPLE;
-                both.a = player.a = target.a = alpha;
+                both.a = player.a = target.a = tileAlpha;
                 DrawRectangle(screenWidth - 320, 0, 320, 130, LIGHTGRAY);
                 DrawRectangle(screenWidth - 310, 10, 40, 30, both);
                 DrawRectangle(screenWidth - 310, 50, 40, 30, player);
