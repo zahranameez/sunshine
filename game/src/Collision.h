@@ -11,6 +11,24 @@ struct Circle
     float radius;
 };
 
+// TODO -- either remove all rectangle functionality cause rotations, or create generic colliders
+// Students will most likely struggle if allowed to use rotated colliders, so favour circles
+void DrawCircle(Circle circle, Color color)
+{
+    DrawCircleV(circle.position, circle.radius, color);
+}
+
+bool CheckCollisionPointCircle(Vector2 point, Circle circle)
+{
+    return DistanceSqr(circle.position, point) <= circle.radius * circle.radius;
+}
+
+bool CheckCollisionCircles(Circle circle1, Circle circle2)
+{
+    return DistanceSqr(circle1.position, circle2.position) <=
+        (circle1.radius * circle1.radius) + (circle2.radius * circle2.radius);
+}
+
 bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
 {
     Vector2 nearest = NearestPoint(lineStart, lineEnd, circle.position);

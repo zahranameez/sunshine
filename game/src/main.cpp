@@ -10,9 +10,11 @@
 
 using namespace std;
 
-#define VISIBILITY_NONE 0
-#define VISIBILITY_PLAYER 1
-#define VISIBILITY_TARGET 2
+#define TILE_FLAGS_NONE 0
+#define TILE_VISIBILITY_CCE 1
+#define TILE_VISIBILITY_RCE 2
+#define TILE_PROXIMITY_CCE 4
+#define TILE_PROXIMITY_RCE 8
 
 constexpr int GRID_LENGTH = 80;
 constexpr int GRID_LENGTH_SQR = GRID_LENGTH * GRID_LENGTH;
@@ -24,7 +26,7 @@ constexpr int TILE_HEIGHT = SCREEN_HEIGHT / GRID_LENGTH;
 struct Tiles
 {
     array<Vector2, GRID_LENGTH_SQR> position{};
-    array<int, GRID_LENGTH_SQR> visibility{};
+    array<int, GRID_LENGTH_SQR> flags{};
 };
 
 int main(void)
@@ -47,147 +49,113 @@ int main(void)
     }
     inFile.close();
 
-    float playerRotation = 0.0f;
-    const float playerWidth = 60.0f;
-    const float playerHeight = 40.0f;
-    const float playerRange = 1000.0f;
-    const float playerRotationSpeed = 100.0f;
+    Circle player{ {0.0f, 0.0f}, 50.0f };
+    Circle cce{ {1000.0f, 650.0f}, 50.0f };
+    Circle rce{ {1000.0f, 250.0f}, 50.0f };
+    const float enemySensorRadius = 100.0f;
 
-    const char* recText = "Nearest to Rectangle";
-    const char* circleText = "Nearest to Circle";
-    const char* poiText = "Nearest Intersection";
-    const int fontSize = 20;
-    const int recTextWidth = MeasureText(recText, fontSize);
-    const int circleTextWidth = MeasureText(circleText, fontSize);
-    const int poiTextWidth = MeasureText(poiText, fontSize);
+    const Color playerColor = ORANGE;
+    const Color cceColor = RED;
+    const Color rceColor = BLUE;
+    const Color background = RAYWHITE;
 
-    const Rectangle rectangle{ 1000.0f, 500.0f, 160.0f, 90.0f };
-    const Circle circle{ { 1000.0f, 250.0f }, 50.0f };
-    const Circle target{ {100.0f, 600.0f}, 50.0f };
+    // Pre-allocating to reduce lag
+    vector<size_t> cceProximityTiles(GRID_LENGTH_SQR);
+    vector<size_t> rceProximityTiles(GRID_LENGTH_SQR);
+    vector<size_t> cceVisibilityTiles(GRID_LENGTH_SQR);
+    vector<size_t> rceVisibilityTiles(GRID_LENGTH_SQR);
 
-    bool usePOI = false; // show nearest point of intersection, nearest circle, and nearest rectangle points
-    bool useLOS = false; // show if player & target, only player, only target, or nothing is visible
+    bool useHeatmap = true;
     bool useGUI = false;
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
     rlImGuiSetup(true);
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
-        float dt = GetFrameTime();
-        if (IsKeyDown(KEY_E))
-            playerRotation += playerRotationSpeed * dt;
-        if (IsKeyDown(KEY_Q))
-            playerRotation -= playerRotationSpeed * dt;
+        player.position = GetMousePosition();
 
-        const Vector2 playerPosition = GetMousePosition();
-        const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
-        const Vector2 playerEnd = playerPosition + playerDirection * playerRange;
-        const Rectangle playerRec{ playerPosition.x, playerPosition.y, playerWidth, playerHeight };
+        cceProximityTiles.clear();
+        rceProximityTiles.clear();
+        cceVisibilityTiles.clear();
+        rceVisibilityTiles.clear();
 
-        const Vector2 nearestRecPoint = NearestPoint(playerPosition, playerEnd,
-            { rectangle.x + rectangle.width * 0.5f, rectangle.y + rectangle.height * 0.5f });
-        const Vector2 nearestCirclePoint = NearestPoint(playerPosition, playerEnd, circle.position);
-        Vector2 poi;
-
-        const bool collision = NearestIntersection(playerPosition, playerEnd, obstacles, poi);
-        const bool rectangleVisible = IsRectangleVisible(playerPosition, playerEnd, rectangle, obstacles);
-        const bool circleVisible = IsCircleVisible(playerPosition, playerEnd, circle, obstacles);
-        const Color recMarkerColor = rectangleVisible ? DARKGREEN : RED;
-        const Color circleMarkerColor =  circleVisible ? DARKGREEN : RED;
-
-        if (useLOS)
+        // Broad phase
+        for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
         {
-            for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
+            tiles.flags[i] = TILE_FLAGS_NONE;
+            Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+
+            if (CheckCollisionPointCircle(tileCenter, { cce.position, enemySensorRadius }))
+                cceProximityTiles.push_back(i);
+
+            if (CheckCollisionPointCircle(tileCenter, { rce.position, enemySensorRadius }))
+                rceProximityTiles.push_back(i);
+        }
+
+        // Narrow phase cce
+        for (size_t i : cceProximityTiles)
+        {
+            tiles.flags[i] |= TILE_PROXIMITY_CCE;
+            Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+
+            if (IsCircleVisible(tileCenter, player.position, player, obstacles))
             {
-                Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-                tiles.visibility[i] = VISIBILITY_NONE;
-                if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
-                    tiles.visibility[i] |= VISIBILITY_PLAYER;
-                if (IsCircleVisible(tileCenter, target.position, target, obstacles))
-                    tiles.visibility[i] |= VISIBILITY_TARGET;
+                tiles.flags[i] |= TILE_VISIBILITY_CCE;
+                cceVisibilityTiles.push_back(i);
+            }
+        }
+
+        // Narrow phase rce
+        for (size_t i : rceProximityTiles)
+        {
+            tiles.flags[i] |= TILE_PROXIMITY_RCE;
+            Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+
+            if (IsCircleVisible(tileCenter, player.position, player, obstacles))
+            {
+                tiles.flags[i] |= TILE_VISIBILITY_RCE;
+                rceVisibilityTiles.push_back(i);
             }
         }
 
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground(background);
 
-        if (useLOS)
+        // Render tiles
+        if (useHeatmap)
         {
-            // Render visibility tiles
-            const int tileAlpha = 96;
             for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
             {
                 Color color = BLACK;
-                switch (tiles.visibility[i])
-                {
-                case VISIBILITY_PLAYER | VISIBILITY_TARGET:
-                    color = GREEN;
-                    break;
-                case VISIBILITY_PLAYER:
-                    color = BLUE;
-                    break;
-                case VISIBILITY_TARGET:
-                    color = PURPLE;
-                    break;
-                }
-                color.a = tileAlpha;
+                const int flag = tiles.flags[i];
+                const unsigned char intensity = 64;
+
+                // Increment color based on flags; cce = red, rce = blue.
+                // (Not using else because I want visibility tiles to be 2x the brightness of proximity tiles).
+                if (flag & TILE_PROXIMITY_CCE) color.r += intensity;
+                if (flag & TILE_PROXIMITY_RCE) color.b += intensity;
+                if (flag & TILE_VISIBILITY_CCE) color.r += intensity;
+                if (flag & TILE_VISIBILITY_RCE) color.b += intensity;
+                if (flag == TILE_FLAGS_NONE) color = background;
                 DrawRectangleV(tiles.position[i], { TILE_WIDTH, TILE_HEIGHT }, color);
-            }
-
-            // Render target
-            DrawCircleV(target.position, target.radius, PURPLE);
-
-            // Render legend
-            if (useGUI)
-            {
-                Color both = GREEN;
-                Color player = BLUE;
-                Color target = PURPLE;
-                both.a = player.a = target.a = tileAlpha;
-                DrawRectangle(SCREEN_WIDTH - 320, 0, 320, 130, LIGHTGRAY);
-                DrawRectangle(SCREEN_WIDTH - 310, 10, 40, 30, both);
-                DrawRectangle(SCREEN_WIDTH - 310, 50, 40, 30, player);
-                DrawRectangle(SCREEN_WIDTH - 310, 90, 40, 30, target);
-                DrawText("<-- Player & Target", SCREEN_WIDTH - 260, 15, fontSize, both);
-                DrawText("<-- Player Only", SCREEN_WIDTH - 260, 55, fontSize, player);
-                DrawText("<-- Target Only", SCREEN_WIDTH - 260, 95, fontSize, target);
             }
         }
 
-        // Render player
-        DrawRectanglePro(playerRec, { playerWidth * 0.5f, playerHeight * 0.5f }, playerRotation, BLUE);
-        DrawLine(playerPosition.x, playerPosition.y, playerEnd.x, playerEnd.y, BLUE);
-        DrawCircleV(playerPosition, 10.0f, BLACK);
+        // Render entities
+        DrawCircle(cce, cceColor);
+        DrawCircle(rce, rceColor);
+        DrawCircle(player, playerColor);
 
         // Render obstacles (occluders)
         for (const Rectangle& obstacle : obstacles)
-            DrawRectangleRec(obstacle, GREEN);
-
-        if (usePOI)
-        {
-            // Render collision shapes
-            DrawRectangleRec(rectangle, rectangleVisible ? GREEN : RED);
-            DrawCircleV(circle.position, circle.radius, circleVisible ? GREEN : RED);
-
-            // Render labels & markers
-            DrawText(circleText, nearestCirclePoint.x - circleTextWidth * 0.5f, nearestCirclePoint.y - fontSize * 2, fontSize, BLACK);
-            DrawCircleV(nearestRecPoint, 10.0f, recMarkerColor);
-            DrawText(recText, nearestRecPoint.x - recTextWidth * 0.5f, nearestRecPoint.y - fontSize * 2, fontSize, BLACK);
-            DrawCircleV(nearestCirclePoint, 10.0f, circleMarkerColor);
-            if (collision)
-            {
-                DrawText(poiText, poi.x - poiTextWidth * 0.5f, poi.y - fontSize * 2, fontSize, BLACK);
-                DrawCircleV(poi, 10.0f, DARKGREEN);
-            }
-        }
+            DrawRectangleRec(obstacle, GRAY);
         
         // Render GUI
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
         if (useGUI)
         {
             rlImGuiBegin();
-            ImGui::Checkbox("POI", &usePOI);
-            ImGui::Checkbox("LOS", &useLOS);
+            ImGui::Checkbox("Use heatmap", &useHeatmap);
             rlImGuiEnd();
         }
 
