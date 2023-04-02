@@ -14,8 +14,12 @@ using namespace std;
 #define VISIBILITY_PLAYER 1
 #define VISIBILITY_TARGET 2
 
-#define GRID_LENGTH 80
-#define GRID_LENGTH_SQR GRID_LENGTH * GRID_LENGTH
+constexpr int GRID_LENGTH = 80;
+constexpr int GRID_LENGTH_SQR = GRID_LENGTH * GRID_LENGTH;
+constexpr int SCREEN_WIDTH = 1280;
+constexpr int SCREEN_HEIGHT = 720;
+constexpr int TILE_WIDTH = SCREEN_WIDTH / GRID_LENGTH;
+constexpr int TILE_HEIGHT = SCREEN_HEIGHT / GRID_LENGTH;
 
 struct Tiles
 {
@@ -25,17 +29,12 @@ struct Tiles
 
 int main(void)
 {
-    const int screenWidth = 1280;
-    const int screenHeight = 720;
-    const int tileWidth = screenWidth / GRID_LENGTH;
-    const int tileHeight = screenHeight / GRID_LENGTH;
-
     Tiles tiles;
     for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
     {
         size_t col = i % GRID_LENGTH;
         size_t row = i / GRID_LENGTH;
-        tiles.position[i] = { float(col * tileWidth), float(row * tileHeight) };
+        tiles.position[i] = { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
     }
 
     vector<Rectangle> obstacles;
@@ -69,7 +68,7 @@ int main(void)
     bool usePOI = false; // show nearest point of intersection, nearest circle, and nearest rectangle points
     bool useLOS = false; // show if player & target, only player, only target, or nothing is visible
     bool useGUI = false;
-    InitWindow(screenWidth, screenHeight, "Sunshine");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
     rlImGuiSetup(true);
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -100,7 +99,7 @@ int main(void)
         {
             for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
             {
-                Vector2 tileCenter = tiles.position[i] + Vector2{ tileWidth * 0.5f, tileHeight * 0.5f };
+                Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
                 tiles.visibility[i] = VISIBILITY_NONE;
                 if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
                     tiles.visibility[i] |= VISIBILITY_PLAYER;
@@ -132,7 +131,7 @@ int main(void)
                     break;
                 }
                 color.a = tileAlpha;
-                DrawRectangleV(tiles.position[i], { tileWidth, tileHeight }, color);
+                DrawRectangleV(tiles.position[i], { TILE_WIDTH, TILE_HEIGHT }, color);
             }
 
             // Render target
@@ -145,13 +144,13 @@ int main(void)
                 Color player = BLUE;
                 Color target = PURPLE;
                 both.a = player.a = target.a = tileAlpha;
-                DrawRectangle(screenWidth - 320, 0, 320, 130, LIGHTGRAY);
-                DrawRectangle(screenWidth - 310, 10, 40, 30, both);
-                DrawRectangle(screenWidth - 310, 50, 40, 30, player);
-                DrawRectangle(screenWidth - 310, 90, 40, 30, target);
-                DrawText("<-- Player & Target", screenWidth - 260, 15, fontSize, both);
-                DrawText("<-- Player Only", screenWidth - 260, 55, fontSize, player);
-                DrawText("<-- Target Only", screenWidth - 260, 95, fontSize, target);
+                DrawRectangle(SCREEN_WIDTH - 320, 0, 320, 130, LIGHTGRAY);
+                DrawRectangle(SCREEN_WIDTH - 310, 10, 40, 30, both);
+                DrawRectangle(SCREEN_WIDTH - 310, 50, 40, 30, player);
+                DrawRectangle(SCREEN_WIDTH - 310, 90, 40, 30, target);
+                DrawText("<-- Player & Target", SCREEN_WIDTH - 260, 15, fontSize, both);
+                DrawText("<-- Player Only", SCREEN_WIDTH - 260, 55, fontSize, player);
+                DrawText("<-- Target Only", SCREEN_WIDTH - 260, 95, fontSize, target);
             }
         }
 
