@@ -35,6 +35,31 @@ bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
     return DistanceSqr(nearest, circle.position) <= circle.radius * circle.radius;
 }
 
+bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle, Vector2& poi)
+{
+    Vector2 dc = lineStart - circle.position;
+    Vector2 dx = lineEnd - lineStart;
+    float a = LengthSqr(dx);
+    float b = Dot(dx, dc) * 2.0f;
+    float c = LengthSqr(dc) - circle.radius * circle.radius;
+    float det = b * b - 4.0f * a * c;
+
+    if (a <= FLT_EPSILON || det < 0.0f) return false;
+
+    det = sqrtf(det);
+    float t1 = (-b - det) / (2.0f * a);
+    float t2 = (-b + det) / (2.0f * a);
+
+    Vector2 pois[2]
+    {
+        Vector2 { lineStart + dx * t1 },
+        Vector2 { lineStart + dx * t2 }
+    };
+
+    poi = DistanceSqr(lineStart, pois[0]) < DistanceSqr(lineStart, pois[1]) ? pois[0] : pois[1];
+    return true;
+}
+
 bool CheckCollisionLineRec(Vector2 lineStart, Vector2 lineEnd, Rectangle rectangle)
 {
     float xMin = rectangle.x;

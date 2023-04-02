@@ -49,9 +49,10 @@ int main(void)
     }
     inFile.close();
 
-    Circle player{ {0.0f, 0.0f}, 50.0f };
-    Circle cce{ {1000.0f, 650.0f}, 50.0f };
-    Circle rce{ {1000.0f, 250.0f}, 50.0f };
+    float playerRotation = -30.0f;
+    Circle player{ {550.0f, 500.0f}, 50.0f };
+    Circle cce{ {1000.0f, 250.0f}, 50.0f };
+    Circle rce{ {1000.0f, 650.0f}, 50.0f };
     const float enemySensorRadius = 100.0f;
 
     const Color playerColor = ORANGE;
@@ -72,7 +73,15 @@ int main(void)
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
+        float dt = GetFrameTime();
+        if (IsKeyDown(KEY_E))
+            playerRotation += 100.0f * dt;
+        if (IsKeyDown(KEY_Q))
+            playerRotation -= 100.0f * dt;
+
         player.position = GetMousePosition();
+        const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
+        const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
         cceProximityTiles.clear();
         rceProximityTiles.clear();
@@ -145,6 +154,12 @@ int main(void)
         DrawCircle(cce, cceColor);
         DrawCircle(rce, rceColor);
         DrawCircle(player, playerColor);
+        DrawLineV(player.position, playerEnd, RED);
+
+        // Line-Circle POI test
+        Vector2 poi;
+        if (CheckCollisionLineCircle(player.position, playerEnd, cce, poi))
+            DrawCircleV(poi, 20.0f, GREEN);
 
         // Render obstacles (occluders)
         for (const Rectangle& obstacle : obstacles)
