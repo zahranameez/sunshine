@@ -11,8 +11,12 @@ struct Circle
     float radius;
 };
 
-// TODO -- either remove all rectangle functionality cause rotations, or create generic colliders
-// Students will most likely struggle if allowed to use rotated colliders, so favour circles
+using Polygon = std::vector<Vector2>;
+
+// TODO -- convert entire system to check polygons via line segments
+// (Circle Visible was a lie cause its really just checking center points)
+// Might as well make the thing to convert rectangles to lines!
+
 void DrawCircle(Circle circle, Color color)
 {
     DrawCircleV(circle.position, circle.radius, color);
@@ -81,6 +85,42 @@ bool CheckCollisionLineRec(Vector2 lineStart, Vector2 lineEnd, Rectangle rectang
             return true;
     }
     return false;
+}
+
+bool CheckCollisionPolygons(const Polygon& polygon1, const Polygon& polygon2)
+{
+    for (size_t i = 0; i < polygon1.size(); i++)
+    {
+        Vector2 p1A = polygon1[i];
+        Vector2 p1B = polygon1[(i + 1) % polygon1.size()];
+        for (size_t j = 0; j < polygon2.size(); j++)
+        {
+            Vector2 p2A = polygon2[j];
+            Vector2 p2B = polygon2[(j + 1) % polygon1.size()];
+            if (CheckCollisionLines(p1A, p1B, p2A, p2B, nullptr))
+                return true;
+        }
+    }
+    return false;
+}
+
+std::vector<Vector2> CheckIntersectionPolygons(Polygon& polygon1, const Polygon& polygon2)
+{
+    std::vector<Vector2> intersections(std::min(polygon1.size(), polygon2.size()));
+    for (size_t i = 0; i < polygon1.size(); i++)
+    {
+        Vector2 p1A = polygon1[i];
+        Vector2 p1B = polygon1[(i + 1) % polygon1.size()];
+        for (size_t j = 0; j < polygon2.size(); j++)
+        {
+            Vector2 p2A = polygon2[j];
+            Vector2 p2B = polygon2[(j + 1) % polygon1.size()];
+            Vector2 poi;
+            if (CheckCollisionLines(p1A, p1B, p2A, p2B, &poi))
+                intersections.push_back(poi);
+        }
+    }
+    return intersections;
 }
 
 bool CheckCollisionLineRec(Vector2 lineStart, Vector2 lineEnd, Rectangle rectangle, Vector2& poi)

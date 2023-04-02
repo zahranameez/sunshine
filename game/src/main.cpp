@@ -49,8 +49,11 @@ int main(void)
     }
     inFile.close();
 
-    float playerRotation = -30.0f;
-    Circle player{ {550.0f, 500.0f}, 50.0f };
+    Vector2 playerPosition = Vector2Zero();
+    float playerRotation = 0.0f;
+    const float playerWidth = 60.0f;
+    const float playerHeight = 40.0f;
+
     Circle cce{ {1000.0f, 250.0f}, 50.0f };
     Circle rce{ {1000.0f, 650.0f}, 50.0f };
     const float enemySensorRadius = 100.0f;
@@ -79,9 +82,10 @@ int main(void)
         if (IsKeyDown(KEY_Q))
             playerRotation -= 100.0f * dt;
 
-        player.position = GetMousePosition();
+        playerPosition = GetMousePosition();
         const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
-        const Vector2 playerEnd = player.position + playerDirection * 500.0f;
+        const Vector2 playerEnd = playerPosition + playerDirection * 500.0f;
+        const Rectangle playerRec{ playerPosition.x, playerPosition.y, playerWidth, playerHeight };
 
         cceProximityTiles.clear();
         rceProximityTiles.clear();
@@ -107,7 +111,7 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_CCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            if (IsCircleVisible(tileCenter, player.position, player, obstacles))
+            if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_CCE;
                 cceVisibilityTiles.push_back(i);
@@ -120,7 +124,7 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_RCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            if (IsCircleVisible(tileCenter, player.position, player, obstacles))
+            if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_RCE;
                 rceVisibilityTiles.push_back(i);
@@ -153,13 +157,13 @@ int main(void)
         // Render entities
         DrawCircle(cce, cceColor);
         DrawCircle(rce, rceColor);
-        DrawCircle(player, playerColor);
-        DrawLineV(player.position, playerEnd, RED);
+        DrawRectanglePro(playerRec, { playerWidth * 0.5f, playerHeight * 0.5f }, playerRotation, playerColor);
+        DrawLineV(playerPosition, playerEnd, RED);
 
         // Line-Circle POI test
         Vector2 poi;
-        if (CheckCollisionLineCircle(player.position, playerEnd, cce, poi))
-            DrawCircleV(poi, 20.0f, GREEN);
+        if (CheckCollisionLineCircle(playerPosition, playerEnd, cce, poi))
+            DrawCircleV(poi, 10.0f, GREEN);
 
         // Render obstacles (occluders)
         for (const Rectangle& obstacle : obstacles)
