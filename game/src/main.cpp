@@ -59,6 +59,7 @@ int main(void)
         tiles.position[i] = { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
     }
 
+    vector<Polygon> polygons;
     vector<Rectangle> obstacles;
     std::ifstream inFile("../game/assets/data/obstacles.txt");
     while (!inFile.eof())
@@ -66,6 +67,11 @@ int main(void)
         Rectangle obstacle;
         inFile >> obstacle.x >> obstacle.y >> obstacle.width >> obstacle.height;
         obstacles.push_back(obstacle);
+
+        Vector2 position{ obstacle.x + obstacle.width * 0.5f, obstacle.y + obstacle.height * 0.5f };
+        Polygon polygon = FromRectangle(obstacle.width, obstacle.height);
+        TransformPolygon(polygon, position, 0.0f);
+        polygons.push_back(std::move(polygon));
     }
     inFile.close();
 
@@ -74,8 +80,11 @@ int main(void)
     const float playerWidth = 60.0f;
     const float playerHeight = 40.0f;
 
-    Circle cce{ {1000.0f, 250.0f}, 50.0f };
-    Circle rce{ {1000.0f, 650.0f}, 50.0f };
+    Vector2 ccePosition{ 1000.0f, 250.0f };
+    Vector2 rcePosition{ 1000.0f, 650.0f };
+    float cceRotation = 45.0f;
+    float rceRotation = 45.0f;
+    const float enemyRenderRadius = 50.0f;
     const float enemySensorRadius = 100.0f;
 
     const Color playerColor = ORANGE;
@@ -124,10 +133,10 @@ int main(void)
             tiles.flags[i] = TILE_FLAGS_NONE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            if (CheckCollisionPointCircle(tileCenter, { cce.position, enemySensorRadius }))
+            if (CheckCollisionPointCircle(tileCenter, { ccePosition, enemySensorRadius }))
                 cceProximityTiles.push_back(i);
 
-            if (CheckCollisionPointCircle(tileCenter, { rce.position, enemySensorRadius }))
+            if (CheckCollisionPointCircle(tileCenter, { rcePosition, enemySensorRadius }))
                 rceProximityTiles.push_back(i);
         }
 
@@ -137,7 +146,8 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_CCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
+            //if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
+            if (IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_CCE;
                 cceVisibilityTiles.push_back(i);
@@ -150,7 +160,8 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_RCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
+            //if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
+            if (IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_RCE;
                 rceVisibilityTiles.push_back(i);
@@ -181,20 +192,19 @@ int main(void)
         }
 
         // Render entities
-        DrawCircle(cce, cceColor);
-        DrawCircle(rce, rceColor);
-        DrawLineV(playerPosition, playerEnd, RED);
+        DrawCircleV(ccePosition, enemyRenderRadius, cceColor);
+        DrawCircleV(rcePosition, enemyRenderRadius, rceColor);
+        DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
         DrawPolygon(testPoly, testColor);
 
-        // Line-Circle POI test
+        // Level geometry intersection test
         Vector2 poi;
-        if (CheckCollisionLineCircle(playerPosition, playerEnd, cce, poi))
+        if (NearestIntersection(playerPosition, playerEnd, polygons, poi))
             DrawCircleV(poi, 10.0f, GREEN);
 
-        // Render obstacles (occluders)
-        for (const Rectangle& obstacle : obstacles)
-            DrawRectangleRec(obstacle, GRAY);
+        for (const Polygon& polygon : polygons)
+            DrawPolygon(polygon, GRAY);
         
         // Render GUI
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
