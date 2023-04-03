@@ -29,6 +29,26 @@ struct Tiles
     array<int, GRID_LENGTH_SQR> flags{};
 };
 
+void TransformPolygon(Polygon& polygon, Vector2 translation, float rotation)
+{
+    for (Vector2& point : polygon)
+        point = Rotate(point, rotation) + translation;
+}
+
+Polygon FromRectangle(int width, int height)
+{
+    const float halfWidth = width * 0.5f;
+    const float halfHeight = height * 0.5f;
+
+    Polygon polygon(4);
+    polygon[0] = { -halfWidth, -halfHeight };   // top left
+    polygon[1] = { halfWidth, -halfHeight };    // top right
+    polygon[2] = { halfWidth, halfHeight };     // bot right
+    polygon[3] = { -halfWidth, halfHeight };    // bot left
+
+    return polygon;
+}
+
 int main(void)
 {
     Tiles tiles;
@@ -86,6 +106,12 @@ int main(void)
         const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
         const Vector2 playerEnd = playerPosition + playerDirection * 500.0f;
         const Rectangle playerRec{ playerPosition.x, playerPosition.y, playerWidth, playerHeight };
+
+        Polygon playerPolygon = FromRectangle(playerWidth, playerHeight);
+        Polygon testPoly = FromRectangle(100, 100);
+        TransformPolygon(playerPolygon, playerPosition, playerRotation * DEG2RAD);
+        TransformPolygon(testPoly, { 500.0f, 500.0f }, 45.0f * DEG2RAD);
+        Color testColor = CheckCollisionPolygons(playerPolygon, testPoly) ? RED : GREEN;
 
         cceProximityTiles.clear();
         rceProximityTiles.clear();
@@ -157,8 +183,9 @@ int main(void)
         // Render entities
         DrawCircle(cce, cceColor);
         DrawCircle(rce, rceColor);
-        DrawRectanglePro(playerRec, { playerWidth * 0.5f, playerHeight * 0.5f }, playerRotation, playerColor);
         DrawLineV(playerPosition, playerEnd, RED);
+        DrawPolygon(playerPolygon, playerColor);
+        DrawPolygon(testPoly, testColor);
 
         // Line-Circle POI test
         Vector2 poi;

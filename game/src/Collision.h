@@ -123,6 +123,16 @@ std::vector<Vector2> CheckIntersectionPolygons(Polygon& polygon1, const Polygon&
     return intersections;
 }
 
+void DrawPolygon(const Polygon& polygon, Color color, float thickness = 1.0f)
+{
+    for (size_t i = 0; i < polygon.size(); i++)
+    {
+        Vector2 lineStart = polygon[i];
+        Vector2 lineEnd = polygon[(i + 1) % polygon.size()];
+        DrawLineEx(lineStart, lineEnd, thickness, color);
+    }
+}
+
 bool CheckCollisionLineRec(Vector2 lineStart, Vector2 lineEnd, Rectangle rectangle, Vector2& poi)
 {
     float xMin = rectangle.x;
