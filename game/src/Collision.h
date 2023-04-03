@@ -79,6 +79,7 @@ bool CheckCollisionLinePolygon(Vector2 lineStart, Vector2 lineEnd, const Polygon
         if (CheckCollisionLines(lineStart, lineEnd, polygon[i], polygon[(i + 1) % polygon.size()], nullptr))
             return true;
     }
+    return false;
 }
 
 bool CheckCollisionPolygons(const Polygon& polygon1, const Polygon& polygon2)
