@@ -49,6 +49,30 @@ Polygon FromRectangle(int width, int height)
     return polygon;
 }
 
+void NarrowPhase(Vector2 position, const Polygon& polygon,
+    const vector<Polygon>& polygons, Tiles& tiles,
+    const vector<size_t>& proximityTiles, vector<size_t>& visibilityTiles,
+    int proximityFlag, int visibilityFlag)
+{
+    for (size_t i : proximityTiles)
+    {
+        tiles.flags[i] |= proximityFlag;
+        Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+
+        bool visible = IsPointVisible(tileCenter, position, polygons);
+        // These checks are too costly. Visibility is guaranteed if line from enemy to player center.
+        //for (Vector2 point : polygon)
+        //    visible = visible || IsCircleVisible(tileCenter, point, { point, 5.0f }, polygons);
+        //visible = visible || IsPolygonVisible(tileCenter, position, polygon, polygons);
+
+        if (visible)
+        {
+            tiles.flags[i] |= visibilityFlag;
+            visibilityTiles.push_back(i);
+        }
+    }
+}
+
 int main(void)
 {
     Tiles tiles;
@@ -137,62 +161,12 @@ int main(void)
         }
 
         // Narrow phase cce
-        for (size_t i : cceProximityTiles)
-        {
-            tiles.flags[i] |= TILE_PROXIMITY_CCE;
-            Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-
-            if (IsPointVisible(tileCenter, playerPosition, polygons))
-            {
-                tiles.flags[i] |= TILE_VISIBILITY_CCE;
-                cceVisibilityTiles.push_back(i);
-            }
-            //bool pointVisible = false;
-            //for (Vector2 point : playerPolygon)
-            //{
-            //    if (IsCircleVisible(tileCenter, point, { point, pointSize }, polygons))
-            //    {
-            //        pointVisible = true;
-            //        break;
-            //    }
-            //}
-            //
-            //bool edgeVisible = IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons);
-            //if (pointVisible || edgeVisible)
-            //{
-            //    tiles.flags[i] |= TILE_VISIBILITY_CCE;
-            //    cceVisibilityTiles.push_back(i);
-            //}
-        }
+        NarrowPhase(playerPosition, playerPolygon, polygons, tiles,
+            cceProximityTiles, cceVisibilityTiles, TILE_PROXIMITY_CCE, TILE_VISIBILITY_CCE);
 
         // Narrow phase rce
-        for (size_t i : rceProximityTiles)
-        {
-            tiles.flags[i] |= TILE_PROXIMITY_RCE;
-            Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-
-            if (IsPointVisible(tileCenter, playerPosition, polygons))
-            {
-                tiles.flags[i] |= TILE_VISIBILITY_RCE;
-                rceVisibilityTiles.push_back(i);
-            }
-            //bool pointVisible = false;
-            //for (Vector2 point : playerPolygon)
-            //{
-            //    if (IsCircleVisible(tileCenter, point, { point, pointSize }, polygons))
-            //    {
-            //        pointVisible = true;
-            //        break;
-            //    }
-            //}
-            //
-            //bool edgeVisible = IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons);
-            //if (pointVisible || edgeVisible)
-            //{
-            //    tiles.flags[i] |= TILE_VISIBILITY_RCE;
-            //    rceVisibilityTiles.push_back(i);
-            //}
-        }
+        NarrowPhase(playerPosition, playerPolygon, polygons, tiles,
+            rceProximityTiles, rceVisibilityTiles, TILE_PROXIMITY_RCE, TILE_VISIBILITY_RCE);
 
         BeginDrawing();
         ClearBackground(background);
