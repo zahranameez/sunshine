@@ -142,22 +142,27 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_CCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            bool pointVisible = false;
-            for (Vector2 point : playerPolygon)
-            {
-                if (IsCircleVisible(tileCenter, point, { point, pointSize }, polygons))
-                {
-                    pointVisible = true;
-                    break;
-                }
-            }
-
-            bool edgeVisible = IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons);
-            if (pointVisible || edgeVisible)
+            if (IsPointVisible(tileCenter, playerPosition, polygons))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_CCE;
                 cceVisibilityTiles.push_back(i);
             }
+            //bool pointVisible = false;
+            //for (Vector2 point : playerPolygon)
+            //{
+            //    if (IsCircleVisible(tileCenter, point, { point, pointSize }, polygons))
+            //    {
+            //        pointVisible = true;
+            //        break;
+            //    }
+            //}
+            //
+            //bool edgeVisible = IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons);
+            //if (pointVisible || edgeVisible)
+            //{
+            //    tiles.flags[i] |= TILE_VISIBILITY_CCE;
+            //    cceVisibilityTiles.push_back(i);
+            //}
         }
 
         // Narrow phase rce
@@ -166,40 +171,45 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_RCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            bool pointVisible = false;
-            for (Vector2 point : playerPolygon)
-            {
-                if (IsCircleVisible(tileCenter, point, { point, pointSize }, polygons))
-                {
-                    pointVisible = true;
-                    break;
-                }
-            }
-
-            bool edgeVisible = IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons);
-            if (pointVisible || edgeVisible)
+            if (IsPointVisible(tileCenter, playerPosition, polygons))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_RCE;
                 rceVisibilityTiles.push_back(i);
             }
+            //bool pointVisible = false;
+            //for (Vector2 point : playerPolygon)
+            //{
+            //    if (IsCircleVisible(tileCenter, point, { point, pointSize }, polygons))
+            //    {
+            //        pointVisible = true;
+            //        break;
+            //    }
+            //}
+            //
+            //bool edgeVisible = IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons);
+            //if (pointVisible || edgeVisible)
+            //{
+            //    tiles.flags[i] |= TILE_VISIBILITY_RCE;
+            //    rceVisibilityTiles.push_back(i);
+            //}
         }
         
         // These are for reference only
         // Wouldn't be able to see anything if markers were rendered for each tile (above)
-        vector<Vector2> cceMarkers;
-        vector<Vector2> rceMarkers;
-        if (IsPolygonVisible(ccePosition, playerPosition, playerPolygon, polygons))
-            cceMarkers = CheckIntersectionLinePolygon(ccePosition, playerPosition, playerPolygon);
-        if (IsPolygonVisible(rcePosition, playerPosition, playerPolygon, polygons))
-            rceMarkers = CheckIntersectionLinePolygon(rcePosition, playerPosition, playerPolygon);
-
-        for (Vector2 point : playerPolygon)
-        {
-            if (IsCircleVisible(ccePosition, point, { point, pointSize }, polygons))
-                cceMarkers.push_back(point);
-            if (IsCircleVisible(rcePosition, point, { point, pointSize }, polygons))
-                rceMarkers.push_back(point);
-        }
+        //vector<Vector2> cceMarkers;
+        //vector<Vector2> rceMarkers;
+        //if (IsPolygonVisible(ccePosition, playerPosition, playerPolygon, polygons))
+        //    cceMarkers = CheckIntersectionLinePolygon(ccePosition, playerPosition, playerPolygon);
+        //if (IsPolygonVisible(rcePosition, playerPosition, playerPolygon, polygons))
+        //    rceMarkers = CheckIntersectionLinePolygon(rcePosition, playerPosition, playerPolygon);
+        //
+        //for (Vector2 point : playerPolygon)
+        //{
+        //    if (IsCircleVisible(ccePosition, point, { point, pointSize }, polygons))
+        //        cceMarkers.push_back(point);
+        //    if (IsCircleVisible(rcePosition, point, { point, pointSize }, polygons))
+        //        rceMarkers.push_back(point);
+        //}
 
         BeginDrawing();
         ClearBackground(background);
@@ -230,11 +240,17 @@ int main(void)
         DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
 
+        // TODO -- test this with a stationary object
+        Color cc = IsPointVisible(ccePosition, playerPosition, polygons) ? GREEN : RED;
+        Color rc = IsPointVisible(rcePosition, playerPosition, polygons) ? GREEN : RED;
+        DrawLineV(ccePosition, playerPosition, cc);
+        DrawLineV(rcePosition, playerPosition, rc);
+
         // Render enemy-player intersections
-        for (Vector2 poi : cceMarkers)
-            DrawCircleV(poi - Vector2{ 2.0f, 0.0f }, pointSize, cceColor);
-        for (Vector2 poi : rceMarkers)
-            DrawCircleV(poi + Vector2{2.0f, 0.0f}, pointSize, rceColor);
+        //for (Vector2 poi : cceMarkers)
+        //    DrawCircleV(poi - Vector2{ 2.0f, 0.0f }, pointSize, cceColor);
+        //for (Vector2 poi : rceMarkers)
+        //    DrawCircleV(poi + Vector2{2.0f, 0.0f}, pointSize, rceColor);
 
         // Render map intersections
         Vector2 levelPoi;
