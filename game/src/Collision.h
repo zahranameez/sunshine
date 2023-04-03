@@ -303,7 +303,7 @@ bool IsPolygonVisible(Vector2 lineStart, Vector2 lineEnd,
 
     Vector2 obstaclePoi;
     bool obstacleCollision = NearestIntersection(lineStart, lineEnd, obstacles, obstaclePoi);
-    if (!obstacleCollision) return false;
+    if (!obstacleCollision) return true;
 
     Vector2 targetPoi = Nearest(lineStart, targetIntersections);
     return DistanceSqr(targetPoi, lineStart) < DistanceSqr(obstaclePoi, lineStart);

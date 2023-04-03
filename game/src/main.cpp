@@ -60,14 +60,11 @@ int main(void)
     }
 
     vector<Polygon> polygons;
-    vector<Rectangle> obstacles;
     std::ifstream inFile("../game/assets/data/obstacles.txt");
     while (!inFile.eof())
     {
         Rectangle obstacle;
         inFile >> obstacle.x >> obstacle.y >> obstacle.width >> obstacle.height;
-        obstacles.push_back(obstacle);
-
         Vector2 position{ obstacle.x + obstacle.width * 0.5f, obstacle.y + obstacle.height * 0.5f };
         Polygon polygon = FromRectangle(obstacle.width, obstacle.height);
         TransformPolygon(polygon, position, 0.0f);
@@ -80,10 +77,11 @@ int main(void)
     const float playerWidth = 60.0f;
     const float playerHeight = 40.0f;
 
+    // Enemy rotation not in use since they do not yet move
+    //float cceRotation = 45.0f;
+    //float rceRotation = 45.0f;
     Vector2 ccePosition{ 1000.0f, 250.0f };
     Vector2 rcePosition{ 1000.0f, 650.0f };
-    float cceRotation = 45.0f;
-    float rceRotation = 45.0f;
     const float enemyRenderRadius = 50.0f;
     const float enemySensorRadius = 100.0f;
 
@@ -117,10 +115,7 @@ int main(void)
         const Rectangle playerRec{ playerPosition.x, playerPosition.y, playerWidth, playerHeight };
 
         Polygon playerPolygon = FromRectangle(playerWidth, playerHeight);
-        Polygon testPoly = FromRectangle(100, 100);
         TransformPolygon(playerPolygon, playerPosition, playerRotation * DEG2RAD);
-        TransformPolygon(testPoly, { 500.0f, 500.0f }, 45.0f * DEG2RAD);
-        Color testColor = CheckCollisionPolygons(playerPolygon, testPoly) ? RED : GREEN;
 
         cceProximityTiles.clear();
         rceProximityTiles.clear();
@@ -146,7 +141,6 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_CCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            //if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
             if (IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_CCE;
@@ -160,13 +154,19 @@ int main(void)
             tiles.flags[i] |= TILE_PROXIMITY_RCE;
             Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
 
-            //if (IsRectangleVisible(tileCenter, playerPosition, playerRec, obstacles))
             if (IsPolygonVisible(tileCenter, playerPosition, playerPolygon, polygons))
             {
                 tiles.flags[i] |= TILE_VISIBILITY_RCE;
                 rceVisibilityTiles.push_back(i);
             }
         }
+
+        vector<Vector2> cceIntersections;
+        vector<Vector2> rceIntersections;
+        if (IsPolygonVisible(ccePosition, playerPosition, playerPolygon, polygons))
+            cceIntersections = CheckIntersectionLinePolygon(ccePosition, playerPosition, playerPolygon);
+        if (IsPolygonVisible(rcePosition, playerPosition, playerPolygon, polygons))
+            rceIntersections = CheckIntersectionLinePolygon(rcePosition, playerPosition, playerPolygon);
 
         BeginDrawing();
         ClearBackground(background);
@@ -196,13 +196,19 @@ int main(void)
         DrawCircleV(rcePosition, enemyRenderRadius, rceColor);
         DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
-        DrawPolygon(testPoly, testColor);
 
-        // Level geometry intersection test
-        Vector2 poi;
-        if (NearestIntersection(playerPosition, playerEnd, polygons, poi))
-            DrawCircleV(poi, 10.0f, GREEN);
+        // Render enemy-player intersections
+        for (Vector2 poi : cceIntersections)
+            DrawCircleV(poi, 10.0f, cceColor);
+        for (Vector2 poi : rceIntersections)
+            DrawCircleV(poi, 10.0f, rceColor);
 
+        // Render map intersections
+        Vector2 levelPoi;
+        if (NearestIntersection(playerPosition, playerEnd, polygons, levelPoi))
+            DrawCircleV(levelPoi, 10.0f, GRAY);
+
+        // Render map
         for (const Polygon& polygon : polygons)
             DrawPolygon(polygon, GRAY);
         
