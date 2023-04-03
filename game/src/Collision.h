@@ -295,6 +295,19 @@ bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd,
     return !intersectionsOuter.empty();
 }
 
+bool IsCircleVisible(Vector2 lineStart, Vector2 lineEnd, Circle circle, const std::vector<Polygon>& obstacles)
+{
+    Vector2 circlePoi;
+    bool circleCollision = CheckCollisionLineCircle(lineStart, lineEnd, circle, circlePoi);
+    if (!circleCollision) return false;
+
+    Vector2 polygonPoi;
+    bool polygonCollision = NearestIntersection(lineStart, lineEnd, obstacles, polygonPoi);
+    if (!polygonCollision) return true;
+
+    return DistanceSqr(circlePoi, lineStart) < DistanceSqr(polygonPoi, lineStart);
+}
+
 bool IsPolygonVisible(Vector2 lineStart, Vector2 lineEnd,
     const Polygon& target, const std::vector<Polygon>& obstacles)
 {
