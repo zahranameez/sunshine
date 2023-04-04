@@ -73,15 +73,25 @@ void NarrowPhase(Vector2 position, const Polygon& polygon,
     }
 }
 
+size_t ScreenToGrid(Vector2 point)
+{
+    size_t col = point.x / TILE_WIDTH;
+    size_t row = point.y / TILE_HEIGHT;
+    return row * GRID_LENGTH + col;
+}
+
+Vector2 GridToScreen(size_t index)
+{
+    size_t col = index % GRID_LENGTH;
+    size_t row = index / GRID_LENGTH;
+    return { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
+}
+
 int main(void)
 {
     Tiles tiles;
     for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
-    {
-        size_t col = i % GRID_LENGTH;
-        size_t row = i / GRID_LENGTH;
-        tiles.position[i] = { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
-    }
+        tiles.position[i] = GridToScreen(i);
 
     vector<Polygon> polygons;
     std::ifstream inFile("../game/assets/data/obstacles.txt");
@@ -147,6 +157,8 @@ int main(void)
         cceVisibilityTiles.clear();
         rceVisibilityTiles.clear();
 
+        size_t playerIndex = ScreenToGrid(playerPosition);
+
         // Broad phase
         for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
         {
@@ -187,6 +199,7 @@ int main(void)
                 if (flag & TILE_VISIBILITY_CCE) color.r += intensity;
                 if (flag & TILE_VISIBILITY_RCE) color.b += intensity;
                 if (flag == TILE_FLAGS_NONE) color = background;
+                if (i == playerIndex) color = ORANGE;
                 DrawRectangleV(tiles.position[i], { TILE_WIDTH, TILE_HEIGHT }, color);
             }
         }
