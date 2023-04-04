@@ -109,10 +109,10 @@ vector<size_t> GridIndices(Rectangle rectangle)
     return indices;
 }
 
-// Inefficient
+// Inefficient, better to do a distance + visibility check using rectangle indices 
 vector<size_t> GridIndices(Circle circle)
 {
-    float length = circle.radius + circle.radius;
+    float length = circle.radius * 2.0f;
     Rectangle rec{ circle.position.x - circle.radius, circle.position.y - circle.radius, length, length };
     vector<size_t> recIndices = GridIndices(rec);
     vector<size_t> circleIndices;
@@ -199,6 +199,13 @@ int main(void)
         cceVisibilityTiles.clear();
         rceVisibilityTiles.clear();
 
+        Rectangle cceRec{ ccePosition.x - enemySensorRadius, ccePosition.y - enemySensorRadius,
+            enemySensorRadius * 2.0f, enemySensorRadius * 2.0f };
+        Rectangle rceRec{ rcePosition.x - enemySensorRadius, rcePosition.y - enemySensorRadius,
+            enemySensorRadius * 2.0f, enemySensorRadius * 2.0f };
+        vector<size_t> cceIndices = GridIndices(cceRec);
+        vector<size_t> rceIndices = GridIndices(rceRec);
+
         vector<size_t> playerRecIndices = GridIndices(playerRec);
         vector<size_t> playerCircleIndices = GridIndices({ playerPosition, 30.0f});
 
@@ -251,10 +258,16 @@ int main(void)
         DrawCircleV(rcePosition, enemyRenderRadius, rceColor);
         DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
+
+        for (size_t i : cceIndices)
+            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceColor);
+        for (size_t i : rceIndices)
+            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceColor);
+
         for (size_t i : playerRecIndices)
             DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, RED);
         for (size_t i : playerCircleIndices)
-            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, BLUE);
+            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, ORANGE);
 
         // Render map intersections
         Vector2 levelPoi;
