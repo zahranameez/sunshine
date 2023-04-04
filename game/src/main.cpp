@@ -82,7 +82,10 @@ int main(void)
 
     Circle cce{ { 1000.0f, 250.0f }, 50.0f };
     Circle rce{ { 1000.0f, 650.0f }, 50.0f };
+    Rigidbody cceBody;
+    Rigidbody rceBody;
     float enemySightDistance = 500.0f;
+    const float enemySpeed = 500.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -108,6 +111,8 @@ int main(void)
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
         // Update enemy information
+        ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
+        ApplyArrive(player.position, rce.position, rceBody, enemySpeed, dt);
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
         vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
         vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);

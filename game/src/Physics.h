@@ -3,8 +3,8 @@
 
 struct Rigidbody
 {
-    Vector2 vel{ 0.0f, 0.0f };
-    Vector2 acc{ 0.0f, 0.0f };
+    Vector2 vel{};
+    Vector2 acc{};
 };
 
 // v2 = v1 + a(t)
@@ -37,4 +37,29 @@ Vector2 Seek(
 {
     Vector2 desiredVelocity = Normalize(targetPosition - seekerPosition) * maxSpeed;
     return desiredVelocity - seekerVelocity;
+}
+
+// Arrive at target
+void Arrive(
+    const Vector2& targetPosition,
+    const Vector2& seekerPosition,
+    Rigidbody& seekerBody, float maxSpeed, float dt)
+{
+    seekerBody.vel = seekerBody.vel + Seek(targetPosition, seekerPosition, seekerBody.vel, maxSpeed) * dt;
+    seekerBody.acc = Decelerate(targetPosition, seekerPosition, seekerBody.vel);
+}
+
+// Apply seek to seeker position & body
+void ApplySeek(Vector2 target, Vector2& seekerPosition, Rigidbody& seekerBody, float maxSpeed, float dt)
+{
+    seekerBody.acc = Seek(target, seekerPosition, seekerBody.vel, maxSpeed);
+    seekerPosition = Integrate(seekerPosition, seekerBody, dt);
+}
+
+// Apply arrive to seeker position & body
+void ApplyArrive(Vector2 target, Vector2& seekerPosition, Rigidbody& seekerBody, float maxSpeed, float dt)
+{
+    seekerBody.vel = seekerBody.vel + Seek(target, seekerPosition, seekerBody.vel, maxSpeed) * dt;
+    seekerBody.acc = Decelerate(target, seekerPosition, seekerBody.vel);
+    seekerPosition = Integrate(seekerPosition, seekerBody, dt);
 }
