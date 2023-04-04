@@ -87,6 +87,32 @@ Vector2 GridToScreen(size_t index)
     return { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
 }
 
+vector<size_t> GridIndices(Rectangle rectangle)
+{
+    const size_t colMin = rectangle.x / TILE_WIDTH;
+    const size_t colMax = (rectangle.x + rectangle.width) / TILE_WIDTH;
+    const size_t rowMin = rectangle.y / TILE_HEIGHT;
+    const size_t rowMax = (rectangle.y + rectangle.height) / TILE_HEIGHT;
+    const size_t width = colMax - colMin;
+    const size_t height = rowMax - rowMin;
+
+    vector<size_t> indices;
+    indices.reserve(width * height);
+    for (size_t row = rowMin; row < rowMax; row++)
+    {
+        for (size_t col = colMin; col < colMax; col++)
+        {
+            indices.push_back(row * GRID_LENGTH + col);
+        }
+    }
+    return indices;
+}
+
+//vector<size_t> GridIndices(Circle circle)
+//{
+//
+//}
+
 int main(void)
 {
     Tiles tiles;
@@ -147,7 +173,11 @@ int main(void)
         playerPosition = GetMousePosition();
         const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
         const Vector2 playerEnd = playerPosition + playerDirection * 500.0f;
-        const Rectangle playerRec{ playerPosition.x, playerPosition.y, playerWidth, playerHeight };
+        const Rectangle playerRec
+        {
+            playerPosition.x - playerWidth * 0.5f, playerPosition.y - playerHeight * 0.5f,
+            playerWidth, playerHeight
+        };
 
         Polygon playerPolygon = FromRectangle(playerWidth, playerHeight);
         TransformPolygon(playerPolygon, playerPosition, playerRotation * DEG2RAD);
@@ -157,7 +187,7 @@ int main(void)
         cceVisibilityTiles.clear();
         rceVisibilityTiles.clear();
 
-        size_t playerIndex = ScreenToGrid(playerPosition);
+        vector<size_t> playerIndices = GridIndices(playerRec);
 
         // Broad phase
         for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
@@ -199,7 +229,6 @@ int main(void)
                 if (flag & TILE_VISIBILITY_CCE) color.r += intensity;
                 if (flag & TILE_VISIBILITY_RCE) color.b += intensity;
                 if (flag == TILE_FLAGS_NONE) color = background;
-                if (i == playerIndex) color = ORANGE;
                 DrawRectangleV(tiles.position[i], { TILE_WIDTH, TILE_HEIGHT }, color);
             }
         }
@@ -209,6 +238,8 @@ int main(void)
         DrawCircleV(rcePosition, enemyRenderRadius, rceColor);
         DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
+        for (size_t i : playerIndices)
+            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, RED);
 
         // Render map intersections
         Vector2 levelPoi;
