@@ -10,24 +10,12 @@
 
 using namespace std;
 
-#define TILE_FLAGS_NONE 0
-#define TILE_VISIBILITY_CCE 1
-#define TILE_VISIBILITY_RCE 2
-#define TILE_PROXIMITY_CCE 4
-#define TILE_PROXIMITY_RCE 8
-
 constexpr int GRID_LENGTH = 80;
 constexpr int GRID_LENGTH_SQR = GRID_LENGTH * GRID_LENGTH;
 constexpr int SCREEN_WIDTH = 1280;
 constexpr int SCREEN_HEIGHT = 720;
 constexpr int TILE_WIDTH = SCREEN_WIDTH / GRID_LENGTH;
 constexpr int TILE_HEIGHT = SCREEN_HEIGHT / GRID_LENGTH;
-
-struct Tiles
-{
-    array<Vector2, GRID_LENGTH_SQR> position{};
-    array<int, GRID_LENGTH_SQR> flags{};
-};
 
 void TransformPolygon(Polygon& polygon, Vector2 translation, float rotation)
 {
@@ -49,30 +37,6 @@ Polygon FromRectangle(int width, int height)
     return polygon;
 }
 
-void NarrowPhase(Vector2 position, const Polygon& polygon,
-    const vector<Polygon>& polygons, Tiles& tiles,
-    const vector<size_t>& proximityTiles, vector<size_t>& visibilityTiles,
-    int proximityFlag, int visibilityFlag)
-{
-    for (size_t i : proximityTiles)
-    {
-        tiles.flags[i] |= proximityFlag;
-        Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-
-        bool visible = IsPointVisible(tileCenter, position, polygons);
-        // These checks are too costly. Visibility is guaranteed if line from enemy to player center.
-        //for (Vector2 point : polygon)
-        //    visible = visible || IsCircleVisible(tileCenter, point, { point, 5.0f }, polygons);
-        //visible = visible || IsPolygonVisible(tileCenter, position, polygon, polygons);
-
-        if (visible)
-        {
-            tiles.flags[i] |= visibilityFlag;
-            visibilityTiles.push_back(i);
-        }
-    }
-}
-
 size_t ScreenToGrid(Vector2 point)
 {
     size_t col = point.x / TILE_WIDTH;
@@ -87,7 +51,6 @@ Vector2 GridToScreen(size_t index)
     return { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
 }
 
-// Efficient
 vector<size_t> GridIndices(Rectangle rectangle)
 {
     const size_t colMin = rectangle.x / TILE_WIDTH;
@@ -109,28 +72,20 @@ vector<size_t> GridIndices(Rectangle rectangle)
     return indices;
 }
 
-// Inefficient, better to do a distance + visibility check using rectangle indices 
-vector<size_t> GridIndices(Circle circle)
+vector<size_t> VisibilityIndices(Circle player, const vector<Polygon>& obstacles, const vector<size_t>& proximityTiles)
 {
-    float length = circle.radius * 2.0f;
-    Rectangle rec{ circle.position.x - circle.radius, circle.position.y - circle.radius, length, length };
-    vector<size_t> recIndices = GridIndices(rec);
-    vector<size_t> circleIndices;
-    circleIndices.reserve(recIndices.size());
-    for (size_t i : recIndices)
+    vector<size_t> visibilityTiles;
+    visibilityTiles.reserve(proximityTiles.size());
+    for (size_t i : proximityTiles)
     {
         Vector2 tileCenter = GridToScreen(i) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-        if (CheckCollisionPointCircle(tileCenter, circle)) circleIndices.push_back(i);
+        if (IsCircleVisible(tileCenter, player.position, player, obstacles)) visibilityTiles.push_back(i);
     }
-    return circleIndices;
+    return visibilityTiles;
 }
 
 int main(void)
 {
-    Tiles tiles;
-    for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
-        tiles.position[i] = GridToScreen(i);
-
     vector<Polygon> polygons;
     std::ifstream inFile("../game/assets/data/obstacles.txt");
     while (!inFile.eof())
@@ -146,28 +101,16 @@ int main(void)
 
     Vector2 playerPosition = Vector2Zero();
     float playerRotation = 0.0f;
-    const float playerWidth = 60.0f;
-    const float playerHeight = 60.0f;
-    const float pointSize = 5.0f;
+    const float playerRadius = 30.0f;
 
-    // Enemy rotation not in use since they do not yet move
-    //float cceRotation = 45.0f;
-    //float rceRotation = 45.0f;
     Vector2 ccePosition{ 1000.0f, 250.0f };
     Vector2 rcePosition{ 1000.0f, 650.0f };
-    const float enemyRenderRadius = 50.0f;
-    const float enemySensorRadius = 100.0f;
+    const float enemyRadius = 50.0f;
 
-    const Color playerColor = ORANGE;
-    const Color cceColor = RED;
-    const Color rceColor = BLUE;
+    const Color playerColor = GREEN;
+    const Color cceColor = BLUE;
+    const Color rceColor = VIOLET;
     const Color background = RAYWHITE;
-
-    // Pre-allocating to reduce lag
-    vector<size_t> cceProximityTiles(GRID_LENGTH_SQR);
-    vector<size_t> rceProximityTiles(GRID_LENGTH_SQR);
-    vector<size_t> cceVisibilityTiles(GRID_LENGTH_SQR);
-    vector<size_t> rceVisibilityTiles(GRID_LENGTH_SQR);
 
     bool useHeatmap = true;
     bool useGUI = false;
@@ -176,6 +119,7 @@ int main(void)
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
+        // Update player information
         float dt = GetFrameTime();
         if (IsKeyDown(KEY_E))
             playerRotation += 100.0f * dt;
@@ -185,89 +129,50 @@ int main(void)
         playerPosition = GetMousePosition();
         const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
         const Vector2 playerEnd = playerPosition + playerDirection * 500.0f;
-        const Rectangle playerRec
-        {
-            playerPosition.x - playerWidth * 0.5f, playerPosition.y - playerHeight * 0.5f,
-            playerWidth, playerHeight
-        };
-
-        Polygon playerPolygon = FromRectangle(playerWidth, playerHeight);
+        const Circle playerCircle{ playerPosition, playerRadius };
+        Polygon playerPolygon = FromRectangle(playerRadius * 2.0f, playerRadius * 2.0f);
         TransformPolygon(playerPolygon, playerPosition, playerRotation * DEG2RAD);
 
-        cceProximityTiles.clear();
-        rceProximityTiles.clear();
-        cceVisibilityTiles.clear();
-        rceVisibilityTiles.clear();
-
-        Rectangle cceRec{ ccePosition.x - enemySensorRadius, ccePosition.y - enemySensorRadius,
-            enemySensorRadius * 2.0f, enemySensorRadius * 2.0f };
-        Rectangle rceRec{ rcePosition.x - enemySensorRadius, rcePosition.y - enemySensorRadius,
-            enemySensorRadius * 2.0f, enemySensorRadius * 2.0f };
-        vector<size_t> cceIndices = GridIndices(cceRec);
-        vector<size_t> rceIndices = GridIndices(rceRec);
-
-        vector<size_t> playerRecIndices = GridIndices(playerRec);
-        vector<size_t> playerCircleIndices = GridIndices({ playerPosition, 30.0f});
-
-        // Broad phase
-        for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
-        {
-            tiles.flags[i] = TILE_FLAGS_NONE;
-            Vector2 tileCenter = tiles.position[i] + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-
-            if (CheckCollisionPointCircle(tileCenter, { ccePosition, enemySensorRadius }))
-                cceProximityTiles.push_back(i);
-
-            if (CheckCollisionPointCircle(tileCenter, { rcePosition, enemySensorRadius }))
-                rceProximityTiles.push_back(i);
-        }
-
-        // Narrow phase cce
-        NarrowPhase(playerPosition, playerPolygon, polygons, tiles,
-            cceProximityTiles, cceVisibilityTiles, TILE_PROXIMITY_CCE, TILE_VISIBILITY_CCE);
-
-        // Narrow phase rce
-        NarrowPhase(playerPosition, playerPolygon, polygons, tiles,
-            rceProximityTiles, rceVisibilityTiles, TILE_PROXIMITY_RCE, TILE_VISIBILITY_RCE);
+        // Update enemy information
+        Rectangle cceRec{ ccePosition.x - enemyRadius, ccePosition.y - enemyRadius,
+            enemyRadius * 2.0f, enemyRadius * 2.0f };
+        Rectangle rceRec{ rcePosition.x - enemyRadius, rcePosition.y - enemyRadius,
+            enemyRadius * 2.0f, enemyRadius * 2.0f };
+        vector<size_t> cceProximityTiles = GridIndices(cceRec);
+        vector<size_t> rceProximityTiles = GridIndices(rceRec);
+        vector<size_t> cceVisibilityTiles = VisibilityIndices(playerCircle, polygons, cceProximityTiles);
+        vector<size_t> rceVisibilityTiles = VisibilityIndices(playerCircle, polygons, rceProximityTiles);
 
         BeginDrawing();
         ClearBackground(background);
 
-        // Render tiles
+        // Render debug
         if (useHeatmap)
         {
-            for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
-            {
-                Color color = BLACK;
-                const int flag = tiles.flags[i];
-                const unsigned char intensity = 64;
+            const Color cceProximity = DARKBLUE;
+            const Color cceVisibiliy = SKYBLUE;
+            const Color rceProximity = DARKPURPLE;
+            const Color rceVisibiliy = PURPLE;
+            // No need for blending, just render enemies after heatmap.
+            //cceProximity.a = cceVisibiliy.a = rceProximity.a = rceVisibiliy.a = 128;
+            for (size_t i : cceProximityTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceProximity);
 
-                // Increment color based on flags; cce = red, rce = blue.
-                // (Not using else because I want visibility tiles to be 2x the brightness of proximity tiles).
-                if (flag & TILE_PROXIMITY_CCE) color.r += intensity;
-                if (flag & TILE_PROXIMITY_RCE) color.b += intensity;
-                if (flag & TILE_VISIBILITY_CCE) color.r += intensity;
-                if (flag & TILE_VISIBILITY_RCE) color.b += intensity;
-                if (flag == TILE_FLAGS_NONE) color = background;
-                DrawRectangleV(tiles.position[i], { TILE_WIDTH, TILE_HEIGHT }, color);
-            }
+            for (size_t i : cceVisibilityTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibiliy);
+
+            for (size_t i : rceProximityTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceProximity);
+
+            for (size_t i : rceVisibilityTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibiliy);
         }
 
         // Render entities
-        DrawCircleV(ccePosition, enemyRenderRadius, cceColor);
-        DrawCircleV(rcePosition, enemyRenderRadius, rceColor);
+        DrawCircleV(ccePosition, enemyRadius, cceColor);
+        DrawCircleV(rcePosition, enemyRadius, rceColor);
         DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
-
-        for (size_t i : cceIndices)
-            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceColor);
-        for (size_t i : rceIndices)
-            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceColor);
-
-        for (size_t i : playerRecIndices)
-            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, RED);
-        for (size_t i : playerCircleIndices)
-            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, ORANGE);
 
         // Render map intersections
         Vector2 levelPoi;
@@ -284,6 +189,8 @@ int main(void)
         {
             rlImGuiBegin();
             ImGui::Checkbox("Use heatmap", &useHeatmap);
+            ImGui::SliderFloat2("CCE Position", &ccePosition.x, 0.0f, 1200.0f);
+            ImGui::SliderFloat2("RCE Position", &rcePosition.x, 0.0f, 1200.0f);
             rlImGuiEnd();
         }
 
