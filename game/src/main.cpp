@@ -110,6 +110,14 @@ int main(void)
         vector<size_t> cceVisibleTiles = VisibleTiles(player, obstacles, cceOverlapTiles);
         vector<size_t> rceVisibleTiles = VisibleTiles(player, obstacles, rceOverlapTiles);
 
+        vector<Vector2> intersections;
+        for (const Circle& obstacle : obstacles)
+        {
+            Vector2 poi;
+            if (CheckCollisionLineCircle(player.position, playerEnd, obstacle, poi))
+                intersections.push_back(poi);
+        }
+
         BeginDrawing();
         ClearBackground(background);
 
@@ -136,9 +144,13 @@ int main(void)
         DrawLineV(player.position, playerEnd, playerColor);
 
         // Render obstacle intersections
-        Vector2 obstaclesPoi;
-        if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
-            DrawCircleV(obstaclesPoi, 10.0f, playerColor);
+        //Vector2 obstaclesPoi;
+        //if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
+        //    DrawCircleV(obstaclesPoi, 10.0f, playerColor);
+
+        // Apparently my line-circle intersection function uses infinite lines!?
+        for (Vector2 poi : intersections)
+            DrawCircleV(poi, 10.0f, playerColor);
 
         // Render obstacles
         for (const Circle& obstacle : obstacles)
