@@ -50,14 +50,16 @@ vector<size_t> OverlapTiles(Rectangle rectangle)
     return indices;
 }
 
-vector<size_t> VisibleTiles(Circle player, const Obstacles& obstacles, const vector<size_t>& tiles)
+vector<size_t> VisibleTiles(Circle target, float sightDistance,
+    const Obstacles& obstacles, const vector<size_t>& tiles)
 {
     vector<size_t> visibilityTiles;
     visibilityTiles.reserve(tiles.size());
     for (size_t i : tiles)
     {
         Vector2 tileCenter = GridToScreen(i) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-        if (IsCircleVisible(tileCenter, player.position, player, obstacles)) visibilityTiles.push_back(i);
+        Vector2 tileEnd = tileCenter + Normalize(target.position - tileCenter) * sightDistance;
+        if (IsCircleVisible(tileCenter, tileEnd, target, obstacles)) visibilityTiles.push_back(i);
     }
     return visibilityTiles;
 }
@@ -80,6 +82,7 @@ int main(void)
 
     Circle cce{ { 1000.0f, 250.0f }, 50.0f };
     Circle rce{ { 1000.0f, 650.0f }, 50.0f };
+    float enemySightDistance = 500.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -107,8 +110,8 @@ int main(void)
         // Update enemy information
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
         vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
-        vector<size_t> cceVisibleTiles = VisibleTiles(player, obstacles, cceOverlapTiles);
-        vector<size_t> rceVisibleTiles = VisibleTiles(player, obstacles, rceOverlapTiles);
+        vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
+        vector<size_t> rceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, rceOverlapTiles);
 
         vector<Vector2> intersections;
         for (const Circle& obstacle : obstacles)
@@ -160,6 +163,7 @@ int main(void)
             ImGui::Checkbox("Use heatmap", &useDebug);
             ImGui::SliderFloat2("CCE Position", (float*)&cce.position, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.position, 0.0f, 1200.0f);
+            ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
             rlImGuiEnd();
         }
 
