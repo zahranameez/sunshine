@@ -4,26 +4,28 @@
 #include <array>
 #include <vector>
 #include <algorithm>
-#include <cassert>
-
-Vector2 Nearest(const Vector2& point, const std::vector<Vector2>& points)
-{
-    assert(!points.empty());
-    return *std::min_element(points.begin(), points.end(),
-        [&point](const Vector2& a, const Vector2& b)
-        {
-            return DistanceSqr(point, a) < DistanceSqr(point, b);
-        }
-    );
-}
 
 struct Circle
 {
-    Vector2 position;
-    float radius;
+    Vector2 position{};
+    float radius = 0.0f;
 };
 
-using Polygon = std::vector<Vector2>;
+using Obstacles = std::vector<Circle>;
+
+Rectangle From(Circle circle)
+{
+    return {
+        circle.position.x - circle.radius, circle.position.y - circle.radius,
+        circle.radius * 2.0f, circle.radius * 2.0f
+    };
+}
+
+Circle From(Rectangle rectangle)
+{
+    Vector2 center = { rectangle.x + rectangle.width * 0.5f, rectangle.y + rectangle.height * 0.5f };
+    return { center, std::max(rectangle.width, rectangle.height) * 0.5f };
+}
 
 void DrawCircle(Circle circle, Color color)
 {
@@ -62,7 +64,7 @@ bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle,
     float t1 = (-b - det) / (2.0f * a);
     float t2 = (-b + det) / (2.0f * a);
 
-    Vector2 pois[2]
+    std::array<Vector2, 2> pois
     {
         Vector2 { lineStart + dx * t1 },
         Vector2 { lineStart + dx * t2 }
@@ -72,128 +74,50 @@ bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle,
     return true;
 }
 
-bool CheckCollisionLinePolygon(Vector2 lineStart, Vector2 lineEnd, const Polygon& polygon)
-{
-    for (size_t i = 0; i < polygon.size(); i++)
-    {
-        if (CheckCollisionLines(lineStart, lineEnd, polygon[i], polygon[(i + 1) % polygon.size()], nullptr))
-            return true;
-    }
-    return false;
-}
-
-bool CheckCollisionPolygons(const Polygon& polygon1, const Polygon& polygon2)
-{
-    for (size_t i = 0; i < polygon1.size(); i++)
-    {
-        Vector2 p1A = polygon1[i];
-        Vector2 p1B = polygon1[(i + 1) % polygon1.size()];
-        for (size_t j = 0; j < polygon2.size(); j++)
-        {
-            Vector2 p2A = polygon2[j];
-            Vector2 p2B = polygon2[(j + 1) % polygon1.size()];
-            if (CheckCollisionLines(p1A, p1B, p2A, p2B, nullptr))
-                return true;
-        }
-    }
-    return false;
-}
-
-std::vector<Vector2> CheckIntersectionLinePolygon(Vector2 lineStart, Vector2 lineEnd, const Polygon& polygon)
+bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles, Vector2& poi)
 {
     std::vector<Vector2> intersections;
-    intersections.reserve(polygon.size());
-    for (size_t i = 0; i < polygon.size(); i++)
-    {
-        Vector2 point;
-        if (CheckCollisionLines(lineStart, lineEnd, polygon[i], polygon[(i + 1) % polygon.size()], &point))
-            intersections.push_back(point);
-    }
-    return intersections;
-}
+    intersections.reserve(obstacles.size());
 
-std::vector<Vector2> CheckIntersectionPolygons(Polygon& polygon1, const Polygon& polygon2)
-{
-    std::vector<Vector2> intersections;
-    intersections.reserve(std::min(polygon1.size(), polygon2.size()));
-    for (size_t i = 0; i < polygon1.size(); i++)
+    for (const Circle& obstacle : obstacles)
     {
-        Vector2 p1A = polygon1[i];
-        Vector2 p1B = polygon1[(i + 1) % polygon1.size()];
-        for (size_t j = 0; j < polygon2.size(); j++)
-        {
-            Vector2 p2A = polygon2[j];
-            Vector2 p2B = polygon2[(j + 1) % polygon1.size()];
-            Vector2 poi;
-            if (CheckCollisionLines(p1A, p1B, p2A, p2B, &poi))
-                intersections.push_back(poi);
-        }
-    }
-    return intersections;
-}
-
-void DrawPolygon(const Polygon& polygon, Color color, float thickness = 1.0f)
-{
-    for (size_t i = 0; i < polygon.size(); i++)
-    {
-        Vector2 lineStart = polygon[i];
-        Vector2 lineEnd = polygon[(i + 1) % polygon.size()];
-        DrawLineEx(lineStart, lineEnd, thickness, color);
-    }
-}
-
-bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd,
-    const std::vector<Polygon>& polygons, Vector2& poi)
-{
-    std::vector<Vector2> intersectionsOuter;
-    intersectionsOuter.reserve(polygons.size());
-
-    for (const Polygon& polygon : polygons)
-    {
-        std::vector<Vector2> intersectionsInner = CheckIntersectionLinePolygon(lineStart, lineEnd, polygon);
-        if (!intersectionsInner.empty())
-            intersectionsOuter.push_back(Nearest(lineStart, intersectionsInner));
+        Vector2 poi;
+        if (CheckCollisionLineCircle(lineStart, lineEnd, obstacle, poi))
+            intersections.push_back(std::move(poi));
     }
 
-    if (!intersectionsOuter.empty())
-        poi = Nearest(lineStart, intersectionsOuter);
+    if (!intersections.empty())
+    {
+        poi = *std::min_element(intersections.begin(), intersections.end(),
+            [&lineStart](const Vector2& a, const Vector2& b)
+            {
+                return DistanceSqr(lineStart, a) < DistanceSqr(lineStart, b);
+            }
+        );
+    }
 
-    return !intersectionsOuter.empty();
+    return !intersections.empty();
 }
 
-bool IsPointVisible(Vector2 lineStart, Vector2 lineEnd, const std::vector<Polygon>& obstacles)
+bool IsPointVisible(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
 {
-    for (const Polygon& obstacle : obstacles)
+    for (const Circle& obstacle : obstacles)
     {
-        if (CheckCollisionLinePolygon(lineStart, lineEnd, obstacle))
+        if (CheckCollisionLineCircle(lineStart, lineEnd, obstacle))
             return false;
     }
     return true;
 }
 
-bool IsCircleVisible(Vector2 lineStart, Vector2 lineEnd, Circle circle, const std::vector<Polygon>& obstacles)
+bool IsCircleVisible(Vector2 lineStart, Vector2 lineEnd, Circle circle, const Obstacles& obstacles)
 {
     Vector2 circlePoi;
     bool circleCollision = CheckCollisionLineCircle(lineStart, lineEnd, circle, circlePoi);
     if (!circleCollision) return false;
 
-    Vector2 polygonPoi;
-    bool polygonCollision = NearestIntersection(lineStart, lineEnd, obstacles, polygonPoi);
-    if (!polygonCollision) return true;
-
-    return DistanceSqr(circlePoi, lineStart) < DistanceSqr(polygonPoi, lineStart);
-}
-
-bool IsPolygonVisible(Vector2 lineStart, Vector2 lineEnd,
-    const Polygon& target, const std::vector<Polygon>& obstacles)
-{
-    std::vector<Vector2> targetIntersections = CheckIntersectionLinePolygon(lineStart, lineEnd, target);
-    if (targetIntersections.empty()) return false;
-
     Vector2 obstaclePoi;
     bool obstacleCollision = NearestIntersection(lineStart, lineEnd, obstacles, obstaclePoi);
     if (!obstacleCollision) return true;
 
-    Vector2 targetPoi = Nearest(lineStart, targetIntersections);
-    return DistanceSqr(targetPoi, lineStart) < DistanceSqr(obstaclePoi, lineStart);
+    return DistanceSqr(circlePoi, lineStart) < DistanceSqr(obstaclePoi, lineStart);
 }
