@@ -144,13 +144,9 @@ int main(void)
         DrawLineV(player.position, playerEnd, playerColor);
 
         // Render obstacle intersections
-        //Vector2 obstaclesPoi;
-        //if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
-        //    DrawCircleV(obstaclesPoi, 10.0f, playerColor);
-
-        // Apparently my line-circle intersection function uses infinite lines!?
-        for (Vector2 poi : intersections)
-            DrawCircleV(poi, 10.0f, playerColor);
+        Vector2 obstaclesPoi;
+        if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
+            DrawCircleV(obstaclesPoi, 10.0f, playerColor);
 
         // Render obstacles
         for (const Circle& obstacle : obstacles)

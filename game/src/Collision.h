@@ -64,14 +64,34 @@ bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle,
     float t1 = (-b - det) / (2.0f * a);
     float t2 = (-b + det) / (2.0f * a);
 
-    std::array<Vector2, 2> pois
-    {
-        Vector2 { lineStart + dx * t1 },
-        Vector2 { lineStart + dx * t2 }
-    };
+    Vector2 poiA{ lineStart + dx * t1 };
+    Vector2 poiB{ lineStart + dx * t2 };
 
-    poi = DistanceSqr(lineStart, pois[0]) < DistanceSqr(lineStart, pois[1]) ? pois[0] : pois[1];
-    return true;
+    // Line is infinite so we must restrit it between start and end via bounding rectangle
+    float xMin = std::min(lineStart.x, lineEnd.x);
+    float xMax = std::max(lineStart.x, lineEnd.x);
+    float yMin = std::min(lineStart.y, lineEnd.y);
+    float yMax = std::max(lineStart.y, lineEnd.y);
+    Rectangle rec{ xMin, yMin, xMax - xMin, yMax - yMin };
+
+    bool collisionA = CheckCollisionPointRec(poiA, rec);
+    bool collisionB = CheckCollisionPointRec(poiB, rec);
+    if (collisionA && collisionB)
+    {
+        poi = DistanceSqr(lineStart, poiA) < DistanceSqr(lineStart, poiB) ? poiA : poiB;
+        return true;
+    }
+    if (collisionA)
+    {
+        poi = poiA;
+        return true;
+    }
+    if (collisionB)
+    {
+        poi = poiB;
+        return true;
+    }
+    return false;
 }
 
 bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles, Vector2& poi)
