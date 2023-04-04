@@ -87,6 +87,7 @@ Vector2 GridToScreen(size_t index)
     return { float(col * TILE_WIDTH), float(row * TILE_HEIGHT) };
 }
 
+// Efficient
 vector<size_t> GridIndices(Rectangle rectangle)
 {
     const size_t colMin = rectangle.x / TILE_WIDTH;
@@ -108,10 +109,21 @@ vector<size_t> GridIndices(Rectangle rectangle)
     return indices;
 }
 
-//vector<size_t> GridIndices(Circle circle)
-//{
-//
-//}
+// Inefficient
+vector<size_t> GridIndices(Circle circle)
+{
+    float length = circle.radius + circle.radius;
+    Rectangle rec{ circle.position.x - circle.radius, circle.position.y - circle.radius, length, length };
+    vector<size_t> recIndices = GridIndices(rec);
+    vector<size_t> circleIndices;
+    circleIndices.reserve(recIndices.size());
+    for (size_t i : recIndices)
+    {
+        Vector2 tileCenter = GridToScreen(i) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+        if (CheckCollisionPointCircle(tileCenter, circle)) circleIndices.push_back(i);
+    }
+    return circleIndices;
+}
 
 int main(void)
 {
@@ -134,8 +146,8 @@ int main(void)
 
     Vector2 playerPosition = Vector2Zero();
     float playerRotation = 0.0f;
-    const float playerWidth = 120.0f;
-    const float playerHeight = 40.0f;
+    const float playerWidth = 60.0f;
+    const float playerHeight = 60.0f;
     const float pointSize = 5.0f;
 
     // Enemy rotation not in use since they do not yet move
@@ -187,7 +199,8 @@ int main(void)
         cceVisibilityTiles.clear();
         rceVisibilityTiles.clear();
 
-        vector<size_t> playerIndices = GridIndices(playerRec);
+        vector<size_t> playerRecIndices = GridIndices(playerRec);
+        vector<size_t> playerCircleIndices = GridIndices({ playerPosition, 30.0f});
 
         // Broad phase
         for (size_t i = 0; i < GRID_LENGTH_SQR; i++)
@@ -238,8 +251,10 @@ int main(void)
         DrawCircleV(rcePosition, enemyRenderRadius, rceColor);
         DrawLineV(playerPosition, playerEnd, playerColor);
         DrawPolygon(playerPolygon, playerColor);
-        for (size_t i : playerIndices)
+        for (size_t i : playerRecIndices)
             DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, RED);
+        for (size_t i : playerCircleIndices)
+            DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, BLUE);
 
         // Render map intersections
         Vector2 levelPoi;
