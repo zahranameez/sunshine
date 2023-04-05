@@ -138,11 +138,25 @@ Obstacles LoadObstacles(const string& path = "../game/assets/data/obstacles.txt"
     return obstacles;
 }
 
+bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
+{
+    for (const Circle& obstacle : obstacles)
+    {
+        Vector2 mtv;
+        if (CheckCollisionCircles(obstacle, circle, mtv))
+        {
+            circle.position = circle.position + mtv;
+            return true;
+        }
+    }
+    return false;
+}
+
 int main(void)
 {
     Obstacles obstacles = LoadObstacles();
 
-    Circle player{ {}, 30.0f };
+    Circle player{ {}, 60.0f };
     Vector2 playerDirection{ 1.0f, 0.0f };
     const float playerRotationSpeed = 100.0f;
 
@@ -191,7 +205,10 @@ int main(void)
             ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
             cceDirection = RotateTowards(cceDirection, Normalize(player.position - cce.position), enemyRotationDelta);
         }
-        
+
+        bool playerCollision = ResolveCollisions(player, obstacles);
+        ResolveCollisions(cce, obstacles);
+
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
         vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
         vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
@@ -227,7 +244,7 @@ int main(void)
         // Render entities
         DrawCircle(cce, cceColor);
         DrawCircle(rce, rceColor);
-        DrawCircle(player, playerColor);
+        DrawCircle(player, playerCollision ? RED : playerColor);
         DrawLineV(player.position, playerEnd, playerColor);
         DrawLineV(cce.position, cce.position + cceDirection * enemySightDistance, cceColor);
         DrawLineV(cce.position, cce.position + Rotate(cceDirection, -15.0f * DEG2RAD) * enemyProbeDistance, cceColor);

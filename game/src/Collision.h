@@ -40,7 +40,18 @@ bool CheckCollisionPointCircle(Vector2 point, Circle circle)
 bool CheckCollisionCircles(Circle circle1, Circle circle2)
 {
     return DistanceSqr(circle1.position, circle2.position) <=
-        (circle1.radius * circle1.radius) + (circle2.radius * circle2.radius);
+        powf(circle1.radius + circle2.radius, 2.0f);
+}
+
+// MTV (minimum translation vector) resolves circle 2 from circle 1
+bool CheckCollisionCircles(Circle circle1, Circle circle2, Vector2& mtv)
+{
+    if (!CheckCollisionCircles(circle1, circle2)) return false;
+    Vector2 AB = circle2.position - circle1.position;
+    const float radiiSum = circle1.radius + circle2.radius;
+    const float penetrationDepth = radiiSum - Length(AB);
+    mtv = Normalize(AB) * penetrationDepth;
+    return true;
 }
 
 bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
