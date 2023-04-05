@@ -31,6 +31,12 @@ Vector2 Decelerate(
     return Negate(Normalize(seekerVelocity)) * a;
 }
 
+Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
+{
+    float deltaRadians = LineAngle(from, to);
+    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
+}
+
 // Accelerate towards target
 Vector2 Seek(
     const Vector2& targetPosition,
@@ -52,16 +58,20 @@ void Arrive(
 }
 
 // Apply seek to seeker position & body
-void ApplySeek(Vector2 target, Vector2& seekerPosition, Rigidbody& seekerBody, float maxSpeed, float dt)
+void ApplySeek(Vector2 target, Vector2& seekerPosition, Vector2& seekerDirection,
+    Rigidbody& seekerBody, float maxSpeed, float maxRadians, float dt)
 {
     seekerBody.acc = Seek(target, seekerPosition, seekerBody.vel, maxSpeed);
     seekerPosition = Integrate(seekerPosition, seekerBody, dt);
+    seekerDirection = RotateTowards(seekerDirection, Normalize(seekerBody.vel), maxRadians);
 }
 
 // Apply arrive to seeker position & body
-void ApplyArrive(Vector2 target, Vector2& seekerPosition, Rigidbody& seekerBody, float maxSpeed, float dt)
+void ApplyArrive(Vector2 target, Vector2& seekerPosition, Vector2& seekerDirection,
+    Rigidbody& seekerBody, float maxSpeed, float maxRadians, float dt)
 {
     seekerBody.vel = seekerBody.vel + Seek(target, seekerPosition, seekerBody.vel, maxSpeed) * dt;
     seekerBody.acc = Decelerate(target, seekerPosition, seekerBody.vel);
     seekerPosition = Integrate(seekerPosition, seekerBody, dt);
+    seekerDirection = RotateTowards(seekerDirection, Normalize(seekerBody.vel), maxRadians);
 }

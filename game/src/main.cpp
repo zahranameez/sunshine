@@ -25,7 +25,6 @@ vector<size_t> VisibleTiles(Circle target, float sightDistance,
 bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
 bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
 
-Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians);
 bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance,
     const Obstacles& obstacles);
 
@@ -35,17 +34,21 @@ Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
 void SavePoints(const Points& points, const char* path = "../game/assets/data/points.txt");
 Points LoadPoints(const char* path = "../game/assets/data/points.txt");
 
+void Patrol(const Points& points, Vector2& position, Vector2& direction, Rigidbody& body,
+    size_t& index, float maxSpeed, float maxRadians, float dt, float threshold = 10.0f);
+
 int main(void)
 {
     Obstacles obstacles = LoadObstacles();
-    Points patrolPoints = LoadPoints();
+    Points points = LoadPoints();
+    size_t point = 0;
 
     Circle player{ {}, 60.0f };
     Vector2 playerDirection{ 1.0f, 0.0f };
     const float playerRotationSpeed = 100.0f;
 
     Circle cce{ { 1000.0f, 250.0f }, 50.0f };
-    Circle rce{ { 1000.0f, 650.0f }, 50.0f };
+    Circle rce{ { 10.0f, 10.0f }, 50.0f };
     Vector2 cceDirection{ -1.0f, 0.0f };
     Vector2 rceDirection{ -1.0f, 0.0f };
     Rigidbody cceBody;
@@ -83,13 +86,15 @@ int main(void)
 
         if (Avoid(cce.position, cceDirection, enemyRotationDelta, enemyProbeDistance, obstacles))
         {
-            ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceBody, enemySpeed, dt);
+            ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceDirection,
+                cceBody, enemySpeed, enemyRotationDelta, dt);
         }
         else
         {
-            ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
-            cceDirection = RotateTowards(cceDirection, Normalize(player.position - cce.position), enemyRotationDelta);
+            ApplyArrive(player.position, cce.position, cceDirection,
+                cceBody, enemySpeed, enemyRotationDelta, dt);
         }
+        Patrol(points, rce.position, rceDirection, rceBody, point, enemySpeed, enemyRotationDelta, dt);
 
         bool playerCollision = ResolveCollisions(player, obstacles);
         bool cceCollision = ResolveCollisions(cce, obstacles);
@@ -134,9 +139,8 @@ int main(void)
         DrawCircle(player, playerCollision ? RED : playerColor);
         DrawLineV(player.position, playerEnd, playerIntersection ? RED : playerColor);
         DrawLineV(cce.position, cce.position + cceDirection * enemySightDistance, cceColor);
-        //DrawLineV(cce.position, cce.position + Rotate(cceDirection, -15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
-        //DrawLineV(cce.position, cce.position + Rotate(cceDirection,  15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
-        
+        DrawLineV(rce.position, rce.position + rceDirection * enemySightDistance, rceColor);
+
         // Render obstacle intersections
         Vector2 obstaclesPoi;
         if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
@@ -147,10 +151,10 @@ int main(void)
             DrawCircle(obstacle, GRAY);
 
         // Render points
-        for (size_t i = 0; i < patrolPoints.size(); i++)
+        for (size_t i = 0; i < points.size(); i++)
         {
-            const Vector2& p0 = patrolPoints[i];
-            const Vector2& p1 = patrolPoints[(i + 1) % patrolPoints.size()];
+            const Vector2& p0 = points[i];
+            const Vector2& p1 = points[(i + 1) % points.size()];
             DrawLineV(p0, p1, GRAY);
             DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
         }
@@ -178,13 +182,13 @@ int main(void)
 
             ImGui::Separator();
             if (ImGui::Button("Save Points"))
-                SavePoints(patrolPoints);
+                SavePoints(points);
             if (ImGui::Button("Add Point"))
-                patrolPoints.push_back({ {}, 10.0f });
+                points.push_back({ {}, 10.0f });
             if (ImGui::Button("Remove Point"))
-                patrolPoints.pop_back();
-            for (size_t i = 0; i < patrolPoints.size(); i++)
-                ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(), (float*)&patrolPoints[i], 0.0f, 1200.0f);
+                points.pop_back();
+            for (size_t i = 0; i < points.size(); i++)
+                ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(), (float*)&points[i], 0.0f, 1200.0f);
 
             rlImGuiEnd();
         }
@@ -272,12 +276,6 @@ bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
     return false;
 }
 
-Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
-{
-    float deltaRadians = LineAngle(from, to);
-    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
-}
-
 bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance, const Obstacles& obstacles)
 {
     const float near = 15.0f * DEG2RAD;
@@ -356,4 +354,12 @@ Points LoadPoints(const char* path)
     }
     file.close();
     return points;
+}
+
+void Patrol(const Points& points, Vector2& position, Vector2& direction, Rigidbody& body,
+    size_t& index, float maxSpeed, float maxRadians, float dt, float threshold)
+{
+    const Vector2& target = points[index];
+    ApplyArrive(target, position, direction, body, maxSpeed, maxRadians, dt);
+    index = Distance(position, target) <= threshold ? ++index % points.size() : index;
 }
