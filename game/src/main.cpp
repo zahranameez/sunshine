@@ -220,7 +220,8 @@ Vector2 GridToScreen(size_t index)
 vector<size_t> OverlapTiles(Rectangle rectangle)
 {
     const size_t colMin = rectangle.x / TILE_WIDTH;
-    const size_t colMax = (rectangle.x + rectangle.width) / TILE_WIDTH;
+    const size_t colMax = ((rectangle.x + rectangle.width) / TILE_WIDTH) > GRID_LENGTH ?
+        GRID_LENGTH : (rectangle.x + rectangle.width) / TILE_WIDTH;
     const size_t rowMin = rectangle.y / TILE_HEIGHT;
     const size_t rowMax = (rectangle.y + rectangle.height) / TILE_HEIGHT;
     const size_t width = colMax - colMin;
