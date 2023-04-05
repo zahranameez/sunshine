@@ -11,6 +11,8 @@ struct Circle
     float radius = 0.0f;
 };
 
+using Points = std::vector<Vector2>;
+
 using Obstacles = std::vector<Circle>;
 
 Rectangle From(Circle circle)

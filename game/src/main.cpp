@@ -15,6 +15,190 @@ constexpr int SCREEN_HEIGHT = 720;
 constexpr int TILE_WIDTH = SCREEN_WIDTH / GRID_LENGTH;
 constexpr int TILE_HEIGHT = SCREEN_HEIGHT / GRID_LENGTH;
 
+size_t ScreenToGrid(Vector2 point);
+Vector2 GridToScreen(size_t index);
+
+vector<size_t> OverlapTiles(Rectangle rectangle);
+vector<size_t> VisibleTiles(Circle target, float sightDistance,
+    const Obstacles& obstacles, const vector<size_t>& tiles);
+
+bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
+bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
+
+Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians);
+bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance,
+    const Obstacles& obstacles);
+
+void SaveObstacles(const Obstacles& obstacles, const char* path = "../game/assets/data/obstacles.txt");
+Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
+
+void SavePoints(const Points& points, const char* path = "../game/assets/data/points.txt");
+Points LoadPoints(const char* path = "../game/assets/data/points.txt");
+
+int main(void)
+{
+    Obstacles obstacles = LoadObstacles();
+    Points patrolPoints = LoadPoints();
+
+    Circle player{ {}, 60.0f };
+    Vector2 playerDirection{ 1.0f, 0.0f };
+    const float playerRotationSpeed = 100.0f;
+
+    Circle cce{ { 1000.0f, 250.0f }, 50.0f };
+    Circle rce{ { 1000.0f, 650.0f }, 50.0f };
+    Vector2 cceDirection{ -1.0f, 0.0f };
+    Vector2 rceDirection{ -1.0f, 0.0f };
+    Rigidbody cceBody;
+    Rigidbody rceBody;
+    float enemySightDistance = 300.0f;
+    float enemyProbeDistance = 100.0f;
+    const float enemySpeed = 300.0f;
+    const float enemyRotationSpeed = 100.0f;
+
+    const Color playerColor = GREEN;
+    const Color cceColor = BLUE;
+    const Color rceColor = VIOLET;
+    const Color background = RAYWHITE;
+
+    bool useDebug = true;
+    bool useGUI = false;
+    bool showPoints = false;
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
+    rlImGuiSetup(true);
+    SetTargetFPS(60);
+    while (!WindowShouldClose())
+    {
+        const float dt = GetFrameTime();
+        const float playerRotationDelta = playerRotationSpeed * dt * DEG2RAD;
+        const float enemyRotationDelta = enemyRotationSpeed * dt * DEG2RAD;
+
+        // Update player information
+        if (IsKeyDown(KEY_E))
+            playerDirection = Rotate(playerDirection, playerRotationDelta);
+        if (IsKeyDown(KEY_Q))
+            playerDirection = Rotate(playerDirection, -playerRotationDelta);
+
+        player.position = GetMousePosition();
+        const Vector2 playerEnd = player.position + playerDirection * 500.0f;
+
+        if (Avoid(cce.position, cceDirection, enemyRotationDelta, enemyProbeDistance, obstacles))
+        {
+            ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceBody, enemySpeed, dt);
+        }
+        else
+        {
+            ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
+            cceDirection = RotateTowards(cceDirection, Normalize(player.position - cce.position), enemyRotationDelta);
+        }
+
+        bool playerCollision = ResolveCollisions(player, obstacles);
+        bool cceCollision = ResolveCollisions(cce, obstacles);
+        bool rceCollision = ResolveCollisions(rce, obstacles);
+
+        vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
+        vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
+        vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
+        vector<size_t> rceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, rceOverlapTiles);
+
+        vector<Vector2> intersections;
+        for (const Circle& obstacle : obstacles)
+        {
+            Vector2 poi;
+            if (CheckCollisionLineCircle(player.position, playerEnd, obstacle, poi))
+                intersections.push_back(poi);
+        }
+        bool playerIntersection = !intersections.empty();
+
+        BeginDrawing();
+        ClearBackground(background);
+
+        // Render debug
+        if (useDebug)
+        {
+            for (size_t i : cceOverlapTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, DARKBLUE);
+
+            for (size_t i : cceVisibleTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, SKYBLUE);
+
+            for (size_t i : rceOverlapTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, DARKPURPLE);
+
+            for (size_t i : rceVisibleTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, PURPLE);
+        }
+
+        // Render entities
+        DrawCircle(cce, cceCollision ? RED : cceColor);
+        DrawCircle(rce, rceCollision ? RED : rceColor);
+        DrawCircle(player, playerCollision ? RED : playerColor);
+        DrawLineV(player.position, playerEnd, playerIntersection ? RED : playerColor);
+        DrawLineV(cce.position, cce.position + cceDirection * enemySightDistance, cceColor);
+        //DrawLineV(cce.position, cce.position + Rotate(cceDirection, -15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
+        //DrawLineV(cce.position, cce.position + Rotate(cceDirection,  15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
+        
+        // Render obstacle intersections
+        Vector2 obstaclesPoi;
+        if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
+            DrawCircleV(obstaclesPoi, 10.0f, playerIntersection ? RED : playerColor);
+
+        // Render obstacles
+        for (const Circle& obstacle : obstacles)
+            DrawCircle(obstacle, GRAY);
+
+        // Render points
+        for (size_t i = 0; i < patrolPoints.size(); i++)
+        {
+            const Vector2& p0 = patrolPoints[i];
+            const Vector2& p1 = patrolPoints[(i + 1) % patrolPoints.size()];
+            DrawLineV(p0, p1, GRAY);
+            DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
+        }
+        
+        // Render GUI
+        if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
+        if (useGUI)
+        {
+            rlImGuiBegin();
+            ImGui::Checkbox("Use heatmap", &useDebug);
+            ImGui::SliderFloat2("CCE Position", (float*)&cce.position, 0.0f, 1200.0f);
+            ImGui::SliderFloat2("RCE Position", (float*)&rce.position, 0.0f, 1200.0f);
+            ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
+            ImGui::SliderFloat("Probe Distance", &enemyProbeDistance, 0.0f, 1500.0f);
+            
+            ImGui::Separator();
+            if (ImGui::Button("Save Obstacles"))
+                SaveObstacles(obstacles);
+            if (ImGui::Button("Add Obstacle"))
+                obstacles.push_back({ {}, 10.0f });
+            if (ImGui::Button("Remove Obstacle"))
+                obstacles.pop_back();
+            for (size_t i = 0; i < obstacles.size(); i++)
+                ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(), (float*)&obstacles[i], 0.0f, 1200.0f);
+
+            ImGui::Separator();
+            if (ImGui::Button("Save Points"))
+                SavePoints(patrolPoints);
+            if (ImGui::Button("Add Point"))
+                patrolPoints.push_back({ {}, 10.0f });
+            if (ImGui::Button("Remove Point"))
+                patrolPoints.pop_back();
+            for (size_t i = 0; i < patrolPoints.size(); i++)
+                ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(), (float*)&patrolPoints[i], 0.0f, 1200.0f);
+
+            rlImGuiEnd();
+        }
+
+        DrawFPS(10, 10);
+        EndDrawing();
+    }
+
+    rlImGuiShutdown();
+    CloseWindow();
+
+    return 0;
+}
+
 size_t ScreenToGrid(Vector2 point)
 {
     size_t col = point.x / TILE_WIDTH;
@@ -74,6 +258,26 @@ bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
     return false;
 }
 
+bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
+{
+    for (const Circle& obstacle : obstacles)
+    {
+        Vector2 mtv;
+        if (CheckCollisionCircles(obstacle, circle, mtv))
+        {
+            circle.position = circle.position + mtv;
+            return true;
+        }
+    }
+    return false;
+}
+
+Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
+{
+    float deltaRadians = LineAngle(from, to);
+    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
+}
+
 bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance, const Obstacles& obstacles)
 {
     const float near = 15.0f * DEG2RAD;
@@ -110,13 +314,7 @@ bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeD
     return false;
 }
 
-Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
-{
-    float deltaRadians = LineAngle(from, to);
-    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
-}
-
-void SaveObstacles(const Obstacles& obstacles, const string& path = "../game/assets/data/obstacles.txt")
+void SaveObstacles(const Obstacles& obstacles, const char* path)
 {
     ofstream file(path, ios::out | ios::trunc);
     for (const Circle& obstacle : obstacles)
@@ -124,7 +322,7 @@ void SaveObstacles(const Obstacles& obstacles, const string& path = "../game/ass
     file.close();
 }
 
-Obstacles LoadObstacles(const string& path = "../game/assets/data/obstacles.txt")
+Obstacles LoadObstacles(const char* path)
 {
     Obstacles obstacles;
     ifstream file(path);
@@ -138,156 +336,24 @@ Obstacles LoadObstacles(const string& path = "../game/assets/data/obstacles.txt"
     return obstacles;
 }
 
-bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
+void SavePoints(const Points& points, const char* path)
 {
-    for (const Circle& obstacle : obstacles)
-    {
-        Vector2 mtv;
-        if (CheckCollisionCircles(obstacle, circle, mtv))
-        {
-            circle.position = circle.position + mtv;
-            return true;
-        }
-    }
-    return false;
+    ofstream file(path, ios::out | ios::trunc);
+    for (const Vector2& point : points)
+        file << point.x << " " << point.y << endl;
+    file.close();
 }
 
-int main(void)
+Points LoadPoints(const char* path)
 {
-    Obstacles obstacles = LoadObstacles();
-
-    Circle player{ {}, 60.0f };
-    Vector2 playerDirection{ 1.0f, 0.0f };
-    const float playerRotationSpeed = 100.0f;
-
-    Circle cce{ { 1000.0f, 250.0f }, 50.0f };
-    Circle rce{ { 1000.0f, 650.0f }, 50.0f };
-    Vector2 cceDirection{ -1.0f, 0.0f };
-    Vector2 rceDirection{ -1.0f, 0.0f };
-    Rigidbody cceBody;
-    Rigidbody rceBody;
-    float enemySightDistance = 300.0f;
-    float enemyProbeDistance = 100.0f;
-    const float enemySpeed = 300.0f;
-    const float enemyRotationSpeed = 100.0f;
-
-    const Color playerColor = GREEN;
-    const Color cceColor = BLUE;
-    const Color rceColor = VIOLET;
-    const Color background = RAYWHITE;
-
-    bool useDebug = true;
-    bool useGUI = false;
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
-    rlImGuiSetup(true);
-    SetTargetFPS(60);
-    while (!WindowShouldClose())
+    Points points;
+    ifstream file(path);
+    while (!file.eof())
     {
-        float dt = GetFrameTime();
-        const float playerRotationDelta = playerRotationSpeed * dt * DEG2RAD;
-        const float enemyRotationDelta = enemyRotationSpeed * dt * DEG2RAD;
-
-        // Update player information
-        if (IsKeyDown(KEY_E))
-            playerDirection = Rotate(playerDirection, playerRotationDelta);
-        if (IsKeyDown(KEY_Q))
-            playerDirection = Rotate(playerDirection, -playerRotationDelta);
-
-        player.position = GetMousePosition();
-        const Vector2 playerEnd = player.position + playerDirection * 500.0f;
-
-        if (Avoid(cce.position, cceDirection, enemyRotationDelta, enemyProbeDistance, obstacles))
-        {
-            ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceBody, enemySpeed, dt);
-        }
-        else
-        {
-            ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
-            cceDirection = RotateTowards(cceDirection, Normalize(player.position - cce.position), enemyRotationDelta);
-        }
-
-        bool playerCollision = ResolveCollisions(player, obstacles);
-        ResolveCollisions(cce, obstacles);
-
-        vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
-        vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
-        vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
-        vector<size_t> rceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, rceOverlapTiles);
-
-        vector<Vector2> intersections;
-        for (const Circle& obstacle : obstacles)
-        {
-            Vector2 poi;
-            if (CheckCollisionLineCircle(player.position, playerEnd, obstacle, poi))
-                intersections.push_back(poi);
-        }
-
-        BeginDrawing();
-        ClearBackground(background);
-
-        // Render debug
-        if (useDebug)
-        {
-            for (size_t i : cceOverlapTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, DARKBLUE);
-
-            for (size_t i : cceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, SKYBLUE);
-
-            for (size_t i : rceOverlapTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, DARKPURPLE);
-
-            for (size_t i : rceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, PURPLE);
-        }
-
-        // Render entities
-        DrawCircle(cce, cceColor);
-        DrawCircle(rce, rceColor);
-        DrawCircle(player, playerCollision ? RED : playerColor);
-        DrawLineV(player.position, playerEnd, playerColor);
-        DrawLineV(cce.position, cce.position + cceDirection * enemySightDistance, cceColor);
-        DrawLineV(cce.position, cce.position + Rotate(cceDirection, -15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
-        DrawLineV(cce.position, cce.position + Rotate(cceDirection,  15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
-        
-        // Render obstacle intersections
-        Vector2 obstaclesPoi;
-        if (NearestIntersection(player.position, playerEnd, obstacles, obstaclesPoi))
-            DrawCircleV(obstaclesPoi, 10.0f, playerColor);
-
-        // Render obstacles
-        for (const Circle& obstacle : obstacles)
-            DrawCircle(obstacle, GRAY);
-        
-        // Render GUI
-        if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
-        if (useGUI)
-        {
-            rlImGuiBegin();
-            ImGui::Checkbox("Use heatmap", &useDebug);
-            ImGui::SliderFloat2("CCE Position", (float*)&cce.position, 0.0f, 1200.0f);
-            ImGui::SliderFloat2("RCE Position", (float*)&rce.position, 0.0f, 1200.0f);
-            ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
-            ImGui::SliderFloat("Probe Distance", &enemyProbeDistance, 0.0f, 1500.0f);
-
-            for (size_t i = 0; i < obstacles.size(); i++)
-                ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(), (float*)&obstacles[i], 0.0f, 1200.0f);
-            if (ImGui::Button("Save Obstacles"))
-                SaveObstacles(obstacles);
-            if (ImGui::Button("Add Obstacle"))
-                obstacles.push_back({ {}, 10.0f });
-            if (ImGui::Button("Remove Obstacle"))
-                obstacles.pop_back();
-
-            rlImGuiEnd();
-        }
-
-        DrawFPS(10, 10);
-        EndDrawing();
+        Vector2 point;
+        file >> point.x >> point.y;
+        points.push_back(std::move(point));
     }
-
-    rlImGuiShutdown();
-    CloseWindow();
-
-    return 0;
+    file.close();
+    return points;
 }
