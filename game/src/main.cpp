@@ -76,8 +76,8 @@ bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
 
 bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance, const Obstacles& obstacles)
 {
+    //const float far = 45.0f * DEG2RAD; <-- More harm than good if we add 2 additional far probes.
     const float near = 15.0f * DEG2RAD;
-    const float far = 45.0f * DEG2RAD;
     Vector2 nearLeft = position + Rotate(direction, -near) * probeDistance;
     if (IsCollision(position, nearLeft, obstacles))
     {
@@ -90,20 +90,6 @@ bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeD
         direction = Rotate(direction, -maxRadians);
         return true;
     }
-    // These do more harm than good
-    //Vector2 farLeft = position + Rotate(direction, -far) * probeDistance;
-    //if (IsCollision(position, farLeft, obstacles))
-    //{
-    //    direction = Rotate(direction, maxRadians);
-    //    return true;
-    //}
-    //Vector2 farRight = position + Rotate(direction, far) * probeDistance;
-    //if (IsCollision(position, farRight, obstacles))
-    //{
-    //    direction = Rotate(direction, -maxRadians);
-    //    return true;
-    //}
-
     return false;
 }
 
@@ -113,21 +99,35 @@ Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
     return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
 }
 
-int main(void)
+void SaveObstacles(const Obstacles& obstacles, const string& path = "../game/assets/data/obstacles.txt")
+{
+    ofstream file(path, ios::out | ios::trunc);
+    for (const Circle& obstacle : obstacles)
+        file << obstacle.position.x << " " << obstacle.position.y << " " << obstacle.radius << endl;
+    file.close();
+}
+
+Obstacles LoadObstacles(const string& path = "../game/assets/data/obstacles.txt")
 {
     Obstacles obstacles;
-    std::ifstream inFile("../game/assets/data/obstacles.txt");
-    while (!inFile.eof())
+    ifstream file(path);
+    while (!file.eof())
     {
-        Rectangle rectangle;
-        inFile >> rectangle.x >> rectangle.y >> rectangle.width >> rectangle.height;
-        obstacles.push_back(From(rectangle));
+        Circle obstacle;
+        file >> obstacle.position.x >> obstacle.position.y >> obstacle.radius;
+        obstacles.push_back(std::move(obstacle));
     }
-    inFile.close();
+    file.close();
+    return obstacles;
+}
 
-    Circle player;
-    player.radius = 30.0f;
-    float playerRotation = 0.0f;
+int main(void)
+{
+    Obstacles obstacles = LoadObstacles();
+
+    Circle player{ {}, 30.0f };
+    Vector2 playerDirection{ 1.0f, 0.0f };
+    const float playerRotationSpeed = 100.0f;
 
     Circle cce{ { 1000.0f, 250.0f }, 50.0f };
     Circle rce{ { 1000.0f, 650.0f }, 50.0f };
@@ -137,8 +137,8 @@ int main(void)
     Rigidbody rceBody;
     float enemySightDistance = 300.0f;
     float enemyProbeDistance = 100.0f;
-    const float enemySpeed = 500.0f;
-    const float enemyRotationSpeed = 100.0f;
+    const float enemySpeed = 250.0f;
+    const float enemyRotationSpeed = 250.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -152,18 +152,19 @@ int main(void)
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
-        // Update player information
         float dt = GetFrameTime();
+        const float playerRotationDelta = playerRotationSpeed * dt * DEG2RAD;
+        const float enemyRotationDelta = enemyRotationSpeed * dt * DEG2RAD;
+
+        // Update player information
         if (IsKeyDown(KEY_E))
-            playerRotation += 100.0f * dt;
+            playerDirection = Rotate(playerDirection, playerRotationDelta);
         if (IsKeyDown(KEY_Q))
-            playerRotation -= 100.0f * dt;
+            playerDirection = Rotate(playerDirection, -playerRotationDelta);
 
         player.position = GetMousePosition();
-        const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        const float enemyRotationDelta = enemyRotationSpeed * dt * DEG2RAD;
         if (Avoid(cce.position, cceDirection, enemyRotationDelta, enemyProbeDistance, obstacles))
         {
             ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceBody, enemySpeed, dt);
@@ -234,6 +235,16 @@ int main(void)
             ImGui::SliderFloat2("RCE Position", (float*)&rce.position, 0.0f, 1200.0f);
             ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
             ImGui::SliderFloat("Probe Distance", &enemyProbeDistance, 0.0f, 1500.0f);
+
+            for (size_t i = 0; i < obstacles.size(); i++)
+                ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(), (float*)&obstacles[i], 0.0f, 1200.0f);
+            if (ImGui::Button("Save Obstacles"))
+                SaveObstacles(obstacles);
+            if (ImGui::Button("Add Obstacle"))
+                obstacles.push_back({ {}, 10.0f });
+            if (ImGui::Button("Remove Obstacle"))
+                obstacles.pop_back();
+
             rlImGuiEnd();
         }
 
