@@ -230,6 +230,13 @@ RMAPI float Dot(Vector2 v1, Vector2 v2)
     return result;
 }
 
+RMAPI float Cross(Vector2 v1, Vector2 v2)
+{
+    float result = v1.x * v2.y - v1.y * v2.x;
+
+    return result;
+}
+
 // Calculate distance between two vectors
 RMAPI float Distance(Vector2 v1, Vector2 v2)
 {
@@ -242,6 +249,13 @@ RMAPI float Distance(Vector2 v1, Vector2 v2)
 RMAPI float DistanceSqr(Vector2 v1, Vector2 v2)
 {
     float result = ((v1.x - v2.x) * (v1.x - v2.x) + (v1.y - v2.y) * (v1.y - v2.y));
+
+    return result;
+}
+
+RMAPI float Sign(float value)
+{
+    float result = (value < 0.0f) ? -1.0f : 1.0f;
 
     return result;
 }
@@ -277,6 +291,15 @@ RMAPI float LineAngle(Vector2 start, Vector2 end)
     result = acosf(dotClamp);
 
     return result;
+}
+
+// Angle between two normalized vectors as you'd imagine it... 
+// Angle and LineAngle are silly
+RMAPI float SignedAngle(Vector2 from, Vector2 to)
+{
+    float angle = LineAngle(from, to);
+    float sign = (from.x * to.y - from.y * to.x) < 0.0f ? -1.0f : 1.0f;
+    return angle * sign;
 }
 
 // Scale vector (multiply by value)

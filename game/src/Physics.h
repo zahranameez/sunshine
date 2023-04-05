@@ -41,18 +41,6 @@ Vector2 Seek(
     return desiredVelocity - seekerVelocity;
 }
 
-void Seek(const Vector2& targetPosition, Vector2& seekerPosition,
-    Rigidbody& body, float speed, float& rotation, float rotationSpeed, float dt)
-{
-    body.acc = Normalize(targetPosition - seekerPosition) * speed - body.vel;
-    seekerPosition = Integrate(seekerPosition, body, dt);
-    Vector2 desiredDirection = Normalize(body.vel);
-    Vector2 currentDirection = Direction(rotation * DEG2RAD);
-    float deltaRotation = Angle(desiredDirection, currentDirection) * RAD2DEG;
-    rotationSpeed = fminf(deltaRotation, rotationSpeed * dt);
-    rotation += rotationSpeed;
-}
-
 // Arrive at target
 void Arrive(
     const Vector2& targetPosition,
