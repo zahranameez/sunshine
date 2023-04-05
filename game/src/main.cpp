@@ -64,6 +64,41 @@ vector<size_t> VisibleTiles(Circle target, float sightDistance,
     return visibilityTiles;
 }
 
+bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
+{
+    for (const Circle& obstacle : obstacles)
+    {
+        if (CheckCollisionLineCircle(lineStart, lineEnd, obstacle))
+            return true;
+    }
+    return false;
+}
+
+bool Avoid(Vector2 position, float& rotation, float rotationSpeed, float distance, float dt,
+    const Obstacles& obstacles)
+{
+    Vector2 left =  position + Direction((rotation - 30.0f) * DEG2RAD) * distance;
+    if (IsCollision(position, left, obstacles))
+    {
+        rotation += rotationSpeed * dt;
+        return true;
+    }
+
+    Vector2 right = position + Direction((rotation + 30.0f) * DEG2RAD) * distance;
+    if (IsCollision(position, right, obstacles))
+    {
+        rotation -= rotationSpeed * dt;
+        return true;
+    }
+
+    return false;
+}
+
+void RotateTo(Vector2 direction, float& rotation, float rotationSpeed, float dt)
+{
+
+}
+
 int main(void)
 {
     Obstacles obstacles;
@@ -82,10 +117,13 @@ int main(void)
 
     Circle cce{ { 1000.0f, 250.0f }, 50.0f };
     Circle rce{ { 1000.0f, 650.0f }, 50.0f };
+    float cceRotation = 180.0f;
+    float rceRotation = 0.0f;
     Rigidbody cceBody;
     Rigidbody rceBody;
     float enemySightDistance = 500.0f;
     const float enemySpeed = 500.0f;
+    const float enemyRotationSpeed = 250.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -110,9 +148,13 @@ int main(void)
         const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        // Update enemy information
-        ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
-        ApplyArrive(player.position, rce.position, rceBody, enemySpeed, dt);
+        //ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
+        //Vector2 cceDirection = Normalize(cceBody.vel);
+
+        // Angle (atan2) only returns between 0 and 90 degrees according to docs...
+        Vector2 cceDirection = Direction(cceRotation * DEG2RAD);
+        float cceAngle = Angle(cceDirection, Normalize(player.position - cce.position)) * RAD2DEG;
+        
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
         vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
         vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
@@ -150,6 +192,8 @@ int main(void)
         DrawCircle(rce, rceColor);
         DrawCircle(player, playerColor);
         DrawLineV(player.position, playerEnd, playerColor);
+        DrawLineV(cce.position, cce.position + cceDirection * 300.0f, cceColor);
+        DrawText(to_string(cceAngle).c_str(), player.position.x - 50.0f, player.position.y - 30.0f, 20.0f, cceColor);
 
         // Render obstacle intersections
         Vector2 obstaclesPoi;

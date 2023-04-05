@@ -3,8 +3,10 @@
 
 struct Rigidbody
 {
-    Vector2 vel{};
-    Vector2 acc{};
+    Vector2 vel{};      // linear velocity
+    Vector2 acc{};      // linear acceleration
+    //Vector2 angVel{};   // angular velocity
+    //Vector2 angAcc{};   // angular acceleration
 };
 
 // v2 = v1 + a(t)
@@ -37,6 +39,18 @@ Vector2 Seek(
 {
     Vector2 desiredVelocity = Normalize(targetPosition - seekerPosition) * maxSpeed;
     return desiredVelocity - seekerVelocity;
+}
+
+void Seek(const Vector2& targetPosition, Vector2& seekerPosition,
+    Rigidbody& body, float speed, float& rotation, float rotationSpeed, float dt)
+{
+    body.acc = Normalize(targetPosition - seekerPosition) * speed - body.vel;
+    seekerPosition = Integrate(seekerPosition, body, dt);
+    Vector2 desiredDirection = Normalize(body.vel);
+    Vector2 currentDirection = Direction(rotation * DEG2RAD);
+    float deltaRotation = Angle(desiredDirection, currentDirection) * RAD2DEG;
+    rotationSpeed = fminf(deltaRotation, rotationSpeed * dt);
+    rotation += rotationSpeed;
 }
 
 // Arrive at target
