@@ -74,20 +74,33 @@ bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
     return false;
 }
 
-bool Avoid(Vector2 position, Vector2& direction, float angularVelocity, float distance, float dt,
-    const Obstacles& obstacles)
+bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance, const Obstacles& obstacles)
 {
-    //Vector2 left =  position + Direction((rotation - 30.0f) * DEG2RAD) * distance;
-    //if (IsCollision(position, left, obstacles))
+    const float near = 15.0f * DEG2RAD;
+    const float far = 45.0f * DEG2RAD;
+    Vector2 nearLeft = position + Rotate(direction, -near) * probeDistance;
+    if (IsCollision(position, nearLeft, obstacles))
+    {
+        direction = Rotate(direction, maxRadians);
+        return true;
+    }
+    Vector2 nearRight = position + Rotate(direction, near) * probeDistance;
+    if (IsCollision(position, nearRight, obstacles))
+    {
+        direction = Rotate(direction, -maxRadians);
+        return true;
+    }
+    // These do more harm than good
+    //Vector2 farLeft = position + Rotate(direction, -far) * probeDistance;
+    //if (IsCollision(position, farLeft, obstacles))
     //{
-    //    rotation += rotationSpeed * dt;
+    //    direction = Rotate(direction, maxRadians);
     //    return true;
     //}
-    //
-    //Vector2 right = position + Direction((rotation + 30.0f) * DEG2RAD) * distance;
-    //if (IsCollision(position, right, obstacles))
+    //Vector2 farRight = position + Rotate(direction, far) * probeDistance;
+    //if (IsCollision(position, farRight, obstacles))
     //{
-    //    rotation -= rotationSpeed * dt;
+    //    direction = Rotate(direction, -maxRadians);
     //    return true;
     //}
 
@@ -118,11 +131,12 @@ int main(void)
 
     Circle cce{ { 1000.0f, 250.0f }, 50.0f };
     Circle rce{ { 1000.0f, 650.0f }, 50.0f };
-    Vector2 cceDirection{ 1.0f, 0.0f };
-    Vector2 rceDirection{ 1.0f, 0.0f };
+    Vector2 cceDirection{ -1.0f, 0.0f };
+    Vector2 rceDirection{ -1.0f, 0.0f };
     Rigidbody cceBody;
     Rigidbody rceBody;
-    float enemySightDistance = 500.0f;
+    float enemySightDistance = 300.0f;
+    float enemyProbeDistance = 100.0f;
     const float enemySpeed = 500.0f;
     const float enemyRotationSpeed = 100.0f;
 
@@ -149,9 +163,17 @@ int main(void)
         const Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
-        cceDirection = RotateTowards(cceDirection, Normalize(player.position - cce.position), enemyRotationSpeed * dt * DEG2RAD);
-
+        const float enemyRotationDelta = enemyRotationSpeed * dt * DEG2RAD;
+        if (Avoid(cce.position, cceDirection, enemyRotationDelta, enemyProbeDistance, obstacles))
+        {
+            ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceBody, enemySpeed, dt);
+        }
+        else
+        {
+            ApplyArrive(player.position, cce.position, cceBody, enemySpeed, dt);
+            cceDirection = RotateTowards(cceDirection, Normalize(player.position - cce.position), enemyRotationDelta);
+        }
+        
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
         vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
         vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
@@ -189,7 +211,9 @@ int main(void)
         DrawCircle(rce, rceColor);
         DrawCircle(player, playerColor);
         DrawLineV(player.position, playerEnd, playerColor);
-        DrawLineV(cce.position, cce.position + cceDirection * 300.0f, cceColor);
+        DrawLineV(cce.position, cce.position + cceDirection * enemySightDistance, cceColor);
+        DrawLineV(cce.position, cce.position + Rotate(cceDirection, -15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
+        DrawLineV(cce.position, cce.position + Rotate(cceDirection,  15.0f * DEG2RAD) * enemyProbeDistance, cceColor);
         
         // Render obstacle intersections
         Vector2 obstaclesPoi;
@@ -209,6 +233,7 @@ int main(void)
             ImGui::SliderFloat2("CCE Position", (float*)&cce.position, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.position, 0.0f, 1200.0f);
             ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
+            ImGui::SliderFloat("Probe Distance", &enemyProbeDistance, 0.0f, 1500.0f);
             rlImGuiEnd();
         }
 
