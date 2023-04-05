@@ -76,20 +76,37 @@ bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
 
 bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance, const Obstacles& obstacles)
 {
-    //const float far = 45.0f * DEG2RAD; <-- More harm than good if we add 2 additional far probes.
     const float near = 15.0f * DEG2RAD;
-    Vector2 nearLeft = position + Rotate(direction, -near) * probeDistance;
+    const float far = 30.0f * DEG2RAD;
+    const Vector2 nearLeft = position + Rotate(direction, -near) * probeDistance;
+    const Vector2 nearRight = position + Rotate(direction, near) * probeDistance;
+    const Vector2 farLeft = position + Rotate(direction, -far) * probeDistance;
+    const Vector2 farRight = position + Rotate(direction, far) * probeDistance;
+
     if (IsCollision(position, nearLeft, obstacles))
     {
         direction = Rotate(direction, maxRadians);
         return true;
     }
-    Vector2 nearRight = position + Rotate(direction, near) * probeDistance;
+
     if (IsCollision(position, nearRight, obstacles))
     {
         direction = Rotate(direction, -maxRadians);
         return true;
     }
+
+    if (IsCollision(position, farLeft, obstacles))
+    {
+        direction = Rotate(direction, maxRadians);
+        return true;
+    }
+
+    if (IsCollision(position, farRight, obstacles))
+    {
+        direction = Rotate(direction, -maxRadians);
+        return true;
+    }
+
     return false;
 }
 
@@ -137,8 +154,8 @@ int main(void)
     Rigidbody rceBody;
     float enemySightDistance = 300.0f;
     float enemyProbeDistance = 100.0f;
-    const float enemySpeed = 250.0f;
-    const float enemyRotationSpeed = 250.0f;
+    const float enemySpeed = 300.0f;
+    const float enemyRotationSpeed = 100.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
