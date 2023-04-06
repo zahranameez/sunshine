@@ -18,7 +18,8 @@ int main(void)
     const int textWidth = MeasureText(greeting, fontSize);
 
     float playerRotation = 0.0f;
-    const float playerRotationSpeed = 100.0f;
+    const float playerRotationSpeed = 100.0f;   // 100 degrees per second
+    const float playerDistance = 500.0f;
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -29,27 +30,22 @@ int main(void)
         if (IsKeyDown(KEY_E))
             playerRotation += playerRotationSpeed * dt;
 
-        Vector2 mousePosition = GetMousePosition();
+        Vector2 playerPosition = GetMousePosition();
+        Vector2 playerDirection = Direction(playerRotation * DEG2RAD);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        // Center text in the middle of the screen
-        //DrawText(greeting, screenWidth * 0.5f - textWidth * 0.5f, screenHeight * 0.5f - fontSize * 0.5f, fontSize, RED);
-
-        // Center text in the horizontal AND vertical center of our curor
-        //Vector2 textPosition{ mousePosition.x - textWidth * 0.5f, mousePosition.y - fontSize * 0.5f };
-
-        // Shift text down "fontSize" units from cursor so that cursor doesn't cut of text
-        //Vector2 textPosition{ mousePosition.x - textWidth * 0.5f, mousePosition.y - fontSize };
-
-        DrawRectanglePro({ mousePosition.x, mousePosition.y, recWidth, recHeight },
+        DrawRectanglePro({ playerPosition.x, playerPosition.y, recWidth, recHeight },
             { recWidth * 0.5f, recHeight * 0.5f }, playerRotation, BLUE);
 
         DrawRectangle(0, 0, recWidth, recHeight, RED);
         DrawRectangle(screenWidth - recWidth, 0, recWidth, recHeight, ORANGE);
         DrawRectangle(0, screenHeight - recHeight, recWidth, recHeight, YELLOW);
         DrawRectangle(screenWidth - recWidth, screenHeight - recHeight, recWidth, recHeight, GREEN);
+        
+        DrawLineV(playerPosition, playerPosition + playerDirection * playerDistance, BLUE);
+        
         EndDrawing();
     }
 
