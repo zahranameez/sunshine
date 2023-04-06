@@ -25,8 +25,7 @@ vector<size_t> VisibleTiles(Circle target, float sightDistance,
 bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
 bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
 
-bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance,
-    const Obstacles& obstacles);
+bool Avoid(Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles);
 
 void SaveObstacles(const Obstacles& obstacles, const char* path = "../game/assets/data/obstacles.txt");
 Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
@@ -50,14 +49,13 @@ int main(void)
     float enemyProbeDistance = 100.0f;
     const float enemyRadius = 50.0f;
     const float enemySpeed = 300.0f;
-    const float enemyRotationSpeed = 200.0f;
     Rigidbody cce;
     Rigidbody rce;
     cce.pos = { 1000.0f, 250.0f };
     rce.pos = { 10.0f, 10.0f };
     cce.dir = { -1.0f, 0.0f };
     rce.dir = { 1.0f, 0.0f };
-    cce.angularSpeed = rce.angularSpeed = enemyRotationSpeed;
+    cce.angularSpeed = rce.angularSpeed = DEG2RAD * 100.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -85,6 +83,9 @@ int main(void)
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
         Patrol(points, rce, point, enemySpeed, dt, 200.0f, 100.0f);
+        //if (!Avoid(cce, enemyProbeDistance, obstacles))
+        //    cce.acc = Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
+        Avoid(cce, enemyProbeDistance, dt, obstacles);
         cce.acc = Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
         Integrate(cce, dt);
 
@@ -92,7 +93,7 @@ int main(void)
         Circle rceCircle{ rce.pos, enemyRadius };
 
         bool playerCollision = ResolveCollisions(player, obstacles);
-        bool cceCollision = ResolveCollisions(cceCircle, obstacles);
+        bool cceCollision = false;//ResolveCollisions(cceCircle, obstacles);
         bool rceCollision = ResolveCollisions(rceCircle, obstacles);
 
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cceCircle));
@@ -272,38 +273,58 @@ bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
     return false;
 }
 
-bool Avoid(Vector2& position, Vector2& direction, float maxRadians, float probeDistance, const Obstacles& obstacles)
+bool Avoid(Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles)
 {
-    const float near = 15.0f * DEG2RAD;
-    const float far = 30.0f * DEG2RAD;
-    const Vector2 nearLeft = position + Rotate(direction, -near) * probeDistance;
-    const Vector2 nearRight = position + Rotate(direction, near) * probeDistance;
-    const Vector2 farLeft = position + Rotate(direction, -far) * probeDistance;
-    const Vector2 farRight = position + Rotate(direction, far) * probeDistance;
-
-    if (IsCollision(position, nearLeft, obstacles))
+    auto avoid = [&](float angle) -> bool
     {
-        direction = Rotate(direction, maxRadians);
-        return true;
-    }
+        Vector2 linearDirection = Normalize(rb.vel);
+        if (IsCollision(rb.pos, rb.pos + Rotate(linearDirection, angle * DEG2RAD) * probeDistance, obstacles))
+        {
+            const float magnitude = Length(rb.vel);
+            const float rotation = rb.angularSpeed * dt;
+            rb.vel = Rotate(linearDirection, -rotation * Sign(angle));
+            rb.vel = rb.vel * magnitude;
+            return true;
+        }
+        return false;
+    };
 
-    if (IsCollision(position, nearRight, obstacles))
-    {
-        direction = Rotate(direction, -maxRadians);
-        return true;
-    }
+    if (avoid(-15.0f)) return true;
+    if (avoid( 15.0f)) return true;
+    if (avoid(-30.0f)) return true;
+    if (avoid( 30.0f)) return true;
+    return false;
 
-    if (IsCollision(position, farLeft, obstacles))
-    {
-        direction = Rotate(direction, maxRadians);
-        return true;
-    }
-
-    if (IsCollision(position, farRight, obstacles))
-    {
-        direction = Rotate(direction, -maxRadians);
-        return true;
-    }
+    //const float near = 15.0f * DEG2RAD;
+    //const float far = 30.0f * DEG2RAD;
+    //const Vector2 nearLeft = rb.pos + Rotate(rb.dir, -near) * probeDistance;
+    //const Vector2 nearRight = rb.pos + Rotate(rb.dir, near) * probeDistance;
+    //const Vector2 farLeft = rb.pos + Rotate(rb.dir, -far) * probeDistance;
+    //const Vector2 farRight = rb.pos + Rotate(rb.dir, far) * probeDistance;
+    //
+    //if (IsCollision(rb.pos, nearLeft, obstacles))
+    //{
+    //    direction = Rotate(direction, maxRadians);
+    //    return true;
+    //}
+    //
+    //if (IsCollision(rb.pos, nearRight, obstacles))
+    //{
+    //    direction = Rotate(direction, -maxRadians);
+    //    return true;
+    //}
+    //
+    //if (IsCollision(rb.pos, farLeft, obstacles))
+    //{
+    //    direction = Rotate(direction, maxRadians);
+    //    return true;
+    //}
+    //
+    //if (IsCollision(rb.pos, farRight, obstacles))
+    //{
+    //    direction = Rotate(direction, -maxRadians);
+    //    return true;
+    //}
 
     return false;
 }

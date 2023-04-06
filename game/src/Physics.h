@@ -17,9 +17,6 @@ void Integrate(Rigidbody& rb, float dt)
 {
     rb.vel = rb.vel + rb.acc * dt;
     rb.pos = rb.pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
-
-    // Always rotating towards the direction of motion (velocity)
-    // by angular speed radians per second every frame
     rb.dir = RotateTowards(rb.dir, Normalize(rb.vel), rb.angularSpeed * dt);
 }
 
