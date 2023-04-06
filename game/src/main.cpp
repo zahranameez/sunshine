@@ -23,10 +23,14 @@ int main(void)
     const float playerDistance = 500.0f;
 
     const Vector2 originDirection = Direction(0.0f);
-    Vector2 projectilePosition{ -100.0f, 0.0f };
-    Vector2 projectileDirection{};
+
     Vector2 playerPosition{};
     Vector2 playerDirection{};
+
+    Vector2 projectilePosition{ -100.0f, 0.0f };
+    Vector2 projectileDirection{};
+    
+    Vector2 projectileVelocity;
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
