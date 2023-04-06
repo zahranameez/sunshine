@@ -34,7 +34,7 @@ Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
 void SavePoints(const Points& points, const char* path = "../game/assets/data/points.txt");
 Points LoadPoints(const char* path = "../game/assets/data/points.txt");
 
-void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float maxRadians, float dt, float slowRadius, float pointRadius);
+void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float dt, float slowRadius, float pointRadius);
 
 int main(void)
 {
@@ -46,17 +46,18 @@ int main(void)
     Vector2 playerDirection{ 1.0f, 0.0f };
     const float playerRotationSpeed = 100.0f;
 
+    float enemySightDistance = 300.0f;
+    float enemyProbeDistance = 100.0f;
+    const float enemyRadius = 50.0f;
+    const float enemySpeed = 300.0f;
+    const float enemyRotationSpeed = 200.0f;
     Rigidbody cce;
     Rigidbody rce;
     cce.pos = { 1000.0f, 250.0f };
     rce.pos = { 10.0f, 10.0f };
     cce.dir = { -1.0f, 0.0f };
     rce.dir = { 1.0f, 0.0f };
-    float enemySightDistance = 300.0f;
-    float enemyProbeDistance = 100.0f;
-    const float enemyRadius = 50.0f;
-    const float enemySpeed = 300.0f;
-    const float enemyRotationSpeed = 200.0f;
+    cce.angularSpeed = rce.angularSpeed = enemyRotationSpeed;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -73,7 +74,6 @@ int main(void)
     {
         const float dt = GetFrameTime();
         const float playerRotationDelta = playerRotationSpeed * dt * DEG2RAD;
-        const float enemyRotationDelta = enemyRotationSpeed * dt * DEG2RAD;
 
         // Update player information
         if (IsKeyDown(KEY_E))
@@ -84,7 +84,7 @@ int main(void)
         player.position = GetMousePosition();
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        Patrol(points, rce, point, enemySpeed, enemyRotationDelta, dt, 200.0f, 100.0f);
+        Patrol(points, rce, point, enemySpeed, dt, 200.0f, 100.0f);
         cce.acc = Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
         Integrate(cce, dt);
 
@@ -352,7 +352,7 @@ Points LoadPoints(const char* path)
     return points;
 }
 
-void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float maxRadians, float dt, float slowRadius, float pointRadius)
+void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float dt, float slowRadius, float pointRadius)
 {
     const Vector2& target = points[index];
     rb.acc = Arrive(target, rb, maxSpeed, slowRadius);

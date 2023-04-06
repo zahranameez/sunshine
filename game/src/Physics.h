@@ -20,6 +20,7 @@ void Integrate(Rigidbody& rb, float dt)
     rb.vel = rb.vel + rb.acc * dt;
     rb.pos = rb.pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
 
+    rb.dir = RotateTowards(rb.dir, Normalize(rb.vel), rb.angularSpeed * dt);
     // "Move orientation a small amount towards the direction of motion every frame
     // test if velocity and direction are similar (dot product?) then stop.
 }
