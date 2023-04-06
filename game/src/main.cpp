@@ -30,7 +30,8 @@ int main(void)
     Vector2 projectilePosition{ -100.0f, 0.0f };
     Vector2 projectileDirection{};
     
-    Vector2 projectileVelocity;
+    Vector2 projectileVelocity{};
+    float projectileSpeed = 100.0f;     // 100 pixels per second
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -44,10 +45,12 @@ int main(void)
         {
             projectilePosition = playerPosition;
             projectileDirection = playerDirection;
+            projectileVelocity = projectileDirection * projectileSpeed;
         }
 
         playerPosition = GetMousePosition();
         playerDirection = Direction(playerRotation * DEG2RAD);
+        projectilePosition = projectilePosition + projectileVelocity * dt;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
