@@ -25,15 +25,14 @@ vector<size_t> VisibleTiles(Circle target, float sightDistance,
 bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
 bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
 
-bool Avoid(Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles);
-
 void SaveObstacles(const Obstacles& obstacles, const char* path = "../game/assets/data/obstacles.txt");
 Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
 
 void SavePoints(const Points& points, const char* path = "../game/assets/data/points.txt");
 Points LoadPoints(const char* path = "../game/assets/data/points.txt");
 
-void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float dt, float slowRadius, float pointRadius);
+Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles);
+Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius);
 
 int main(void)
 {
@@ -82,18 +81,17 @@ int main(void)
         player.position = GetMousePosition();
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        Patrol(points, rce, point, enemySpeed, dt, 200.0f, 100.0f);
-        //if (!Avoid(cce, enemyProbeDistance, obstacles))
-        //    cce.acc = Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
-        Avoid(cce, enemyProbeDistance, dt, obstacles);
-        cce.acc = Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
+        cce.acc = Avoid(cce, enemyProbeDistance, dt, obstacles);
+        cce.acc = cce.acc + Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
+        rce.acc = Patrol(points, rce, point, enemySpeed, 200.0f, 100.0f);
         Integrate(cce, dt);
+        Integrate(rce, dt);
 
         Circle cceCircle{ cce.pos, enemyRadius };
         Circle rceCircle{ rce.pos, enemyRadius };
 
         bool playerCollision = ResolveCollisions(player, obstacles);
-        bool cceCollision = false;//ResolveCollisions(cceCircle, obstacles);
+        bool cceCollision = ResolveCollisions(cceCircle, obstacles);
         bool rceCollision = ResolveCollisions(rceCircle, obstacles);
 
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cceCircle));
@@ -273,60 +271,25 @@ bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
     return false;
 }
 
-bool Avoid(Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles)
+Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles)
 {
-    auto avoid = [&](float angle) -> bool
+    auto avoid = [&](float angle, Vector2& acc) -> bool
     {
-        Vector2 linearDirection = Normalize(rb.vel);
-        if (IsCollision(rb.pos, rb.pos + Rotate(linearDirection, angle * DEG2RAD) * probeDistance, obstacles))
+        if (IsCollision(rb.pos, rb.pos + Rotate(Normalize(rb.vel), angle * DEG2RAD) * probeDistance, obstacles))
         {
-            const float magnitude = Length(rb.vel);
-            const float rotation = rb.angularSpeed * dt;
-            rb.vel = Rotate(linearDirection, -rotation * Sign(angle));
-            rb.vel = rb.vel * magnitude;
+            const Vector2 vf = Rotate(Normalize(rb.vel), rb.angularSpeed * dt * Sign(-angle)) * Length(rb.vel);
+            acc = Acceleration(rb.vel, vf, dt);
             return true;
         }
         return false;
     };
 
-    if (avoid(-15.0f)) return true;
-    if (avoid( 15.0f)) return true;
-    if (avoid(-30.0f)) return true;
-    if (avoid( 30.0f)) return true;
-    return false;
-
-    //const float near = 15.0f * DEG2RAD;
-    //const float far = 30.0f * DEG2RAD;
-    //const Vector2 nearLeft = rb.pos + Rotate(rb.dir, -near) * probeDistance;
-    //const Vector2 nearRight = rb.pos + Rotate(rb.dir, near) * probeDistance;
-    //const Vector2 farLeft = rb.pos + Rotate(rb.dir, -far) * probeDistance;
-    //const Vector2 farRight = rb.pos + Rotate(rb.dir, far) * probeDistance;
-    //
-    //if (IsCollision(rb.pos, nearLeft, obstacles))
-    //{
-    //    direction = Rotate(direction, maxRadians);
-    //    return true;
-    //}
-    //
-    //if (IsCollision(rb.pos, nearRight, obstacles))
-    //{
-    //    direction = Rotate(direction, -maxRadians);
-    //    return true;
-    //}
-    //
-    //if (IsCollision(rb.pos, farLeft, obstacles))
-    //{
-    //    direction = Rotate(direction, maxRadians);
-    //    return true;
-    //}
-    //
-    //if (IsCollision(rb.pos, farRight, obstacles))
-    //{
-    //    direction = Rotate(direction, -maxRadians);
-    //    return true;
-    //}
-
-    return false;
+    Vector2 acc{};
+    if (avoid(-15.0f, acc)) return acc;
+    if (avoid( 15.0f, acc)) return acc;
+    if (avoid(-30.0f, acc)) return acc;
+    if (avoid( 30.0f, acc)) return acc;
+    return acc;
 }
 
 void SaveObstacles(const Obstacles& obstacles, const char* path)
@@ -373,10 +336,8 @@ Points LoadPoints(const char* path)
     return points;
 }
 
-void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float dt, float slowRadius, float pointRadius)
+Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius)
 {
-    const Vector2& target = points[index];
-    rb.acc = Arrive(target, rb, maxSpeed, slowRadius);
-    Integrate(rb, dt);
-    index = Distance(rb.pos, target) <= pointRadius ? ++index % points.size() : index;
+    index = Distance(rb.pos, points[index]) <= pointRadius ? ++index % points.size() : index;
+    return Arrive(points[index], rb, maxSpeed, slowRadius);
 }

@@ -30,6 +30,11 @@ Vector2 Decelerate(const Vector2& pos, const Rigidbody& rb)
     return Negate(Normalize(rb.vel)) * a;
 }
 
+Vector2 Acceleration(const Vector2& vi, const Vector2& vf, float dt)
+{
+    return (vf - vi) / dt;
+}
+
 // Accelerate towards target
 Vector2 Seek(const Vector2& pos, const Rigidbody& rb, float maxSpeed)
 {
