@@ -3,75 +3,53 @@
 
 struct Rigidbody
 {
-    Vector2 vel{};      // linear velocity
-    Vector2 acc{};      // linear acceleration
-    //Vector2 angVel{};   // angular velocity
-    //Vector2 angAcc{};   // angular acceleration
+    Vector2 pos{};
+    Vector2 vel{};
+    Vector2 acc{};
+
+    Vector2 dir{};
+    float angularSpeed;
+    // Always rotating towards the direction of motion (velocity)
+    // by angular speed radians per second every frame
 };
 
 // v2 = v1 + a(t)
 // p2 = p1 + v2(t) + 0.5a(t^2)
-Vector2 Integrate(const Vector2& pos, Rigidbody& rb, float dt)
+void Integrate(Rigidbody& rb, float dt)
 {
     rb.vel = rb.vel + rb.acc * dt;
-    return pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
+    rb.pos = rb.pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
+
+    // "Move orientation a small amount towards the direction of motion every frame
+    // test if velocity and direction are similar (dot product?) then stop.
 }
 
 // vf^2 = vi^2 + 2a(d)
 // 0^2 = vi^2 + 2a(d)
 // -vi^2 / 2d = a
-Vector2 Decelerate(
-    const Vector2& targetPosition,
-    const Vector2& seekerPosition,
-    const Vector2& seekerVelocity)
+Vector2 Decelerate(const Vector2& pos, const Rigidbody& rb)
 {
-    float d = Length(targetPosition - seekerPosition);
-    float a = Dot(seekerVelocity, seekerVelocity) / (d * 2.0f);
-
-    return Negate(Normalize(seekerVelocity)) * a;
-}
-
-Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
-{
-    float deltaRadians = LineAngle(from, to);
-    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
+    float d = Length(pos - rb.pos);
+    float a = LengthSqr(rb.vel) / (d * 2.0f);
+    return Negate(Normalize(rb.vel)) * a;
 }
 
 // Accelerate towards target
-Vector2 Seek(
-    const Vector2& targetPosition,
-    const Vector2& seekerPosition,
-    const Vector2& seekerVelocity, float maxSpeed)
+Vector2 Seek(const Vector2& pos, const Rigidbody& rb, float maxSpeed)
 {
-    Vector2 desiredVelocity = Normalize(targetPosition - seekerPosition) * maxSpeed;
-    return desiredVelocity - seekerVelocity;
+    return Normalize(pos - rb.pos) * maxSpeed - rb.vel;
 }
 
-// Arrive at target
-void Arrive(
-    const Vector2& targetPosition,
-    const Vector2& seekerPosition,
-    Rigidbody& seekerBody, float maxSpeed, float dt)
+Vector2 Arrive(const Vector2& pos, const Rigidbody& rb, float maxSpeed, float slowRadius, float slowFactor = 1.0f)
 {
-    seekerBody.vel = seekerBody.vel + Seek(targetPosition, seekerPosition, seekerBody.vel, maxSpeed) * dt;
-    seekerBody.acc = Decelerate(targetPosition, seekerPosition, seekerBody.vel);
+    Vector2 acc = Seek(pos, rb, maxSpeed);
+    float distance = Distance(pos, rb.pos);
+    if (distance <= slowRadius)
+    {
+        float t = 1.0f - (distance / slowRadius);
+        return Lerp(acc, Decelerate(pos, rb) * slowFactor, t);
+    }
+    return acc;
 }
 
-// Apply seek to seeker position & body
-void ApplySeek(Vector2 target, Vector2& seekerPosition, Vector2& seekerDirection,
-    Rigidbody& seekerBody, float maxSpeed, float maxRadians, float dt)
-{
-    seekerBody.acc = Seek(target, seekerPosition, seekerBody.vel, maxSpeed);
-    seekerPosition = Integrate(seekerPosition, seekerBody, dt);
-    seekerDirection = RotateTowards(seekerDirection, Normalize(seekerBody.vel), maxRadians);
-}
-
-// Apply arrive to seeker position & body
-void ApplyArrive(Vector2 target, Vector2& seekerPosition, Vector2& seekerDirection,
-    Rigidbody& seekerBody, float maxSpeed, float maxRadians, float dt)
-{
-    seekerBody.vel = seekerBody.vel + Seek(target, seekerPosition, seekerBody.vel, maxSpeed) * dt;
-    seekerBody.acc = Decelerate(target, seekerPosition, seekerBody.vel);
-    seekerPosition = Integrate(seekerPosition, seekerBody, dt);
-    seekerDirection = RotateTowards(seekerDirection, Normalize(seekerBody.vel), maxRadians);
-}
+// seekerDirection = RotateTowards(seekerDirection, Normalize(seekerBody.vel), maxRadians)

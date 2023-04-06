@@ -34,8 +34,7 @@ Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
 void SavePoints(const Points& points, const char* path = "../game/assets/data/points.txt");
 Points LoadPoints(const char* path = "../game/assets/data/points.txt");
 
-void Patrol(const Points& points, Vector2& position, Vector2& direction, Rigidbody& body,
-    size_t& index, float maxSpeed, float maxRadians, float dt, float threshold = 10.0f);
+void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float maxRadians, float dt, float slowRadius, float pointRadius);
 
 int main(void)
 {
@@ -47,16 +46,17 @@ int main(void)
     Vector2 playerDirection{ 1.0f, 0.0f };
     const float playerRotationSpeed = 100.0f;
 
-    Circle cce{ { 1000.0f, 250.0f }, 50.0f };
-    Circle rce{ { 10.0f, 10.0f }, 50.0f };
-    Vector2 cceDirection{ -1.0f, 0.0f };
-    Vector2 rceDirection{ -1.0f, 0.0f };
-    Rigidbody cceBody;
-    Rigidbody rceBody;
+    Rigidbody cce;
+    Rigidbody rce;
+    cce.pos = { 1000.0f, 250.0f };
+    rce.pos = { 10.0f, 10.0f };
+    cce.dir = { -1.0f, 0.0f };
+    rce.dir = { 1.0f, 0.0f };
     float enemySightDistance = 300.0f;
     float enemyProbeDistance = 100.0f;
+    const float enemyRadius = 50.0f;
     const float enemySpeed = 300.0f;
-    const float enemyRotationSpeed = 100.0f;
+    const float enemyRotationSpeed = 200.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -84,24 +84,19 @@ int main(void)
         player.position = GetMousePosition();
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        if (Avoid(cce.position, cceDirection, enemyRotationDelta, enemyProbeDistance, obstacles))
-        {
-            ApplySeek(cce.position + cceDirection * enemySpeed, cce.position, cceDirection,
-                cceBody, enemySpeed, enemyRotationDelta, dt);
-        }
-        else
-        {
-            ApplyArrive(player.position, cce.position, cceDirection,
-                cceBody, enemySpeed, enemyRotationDelta, dt);
-        }
-        Patrol(points, rce.position, rceDirection, rceBody, point, enemySpeed, enemyRotationDelta, dt);
+        Patrol(points, rce, point, enemySpeed, enemyRotationDelta, dt, 200.0f, 100.0f);
+        cce.acc = Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
+        Integrate(cce, dt);
+
+        Circle cceCircle{ cce.pos, enemyRadius };
+        Circle rceCircle{ rce.pos, enemyRadius };
 
         bool playerCollision = ResolveCollisions(player, obstacles);
-        bool cceCollision = ResolveCollisions(cce, obstacles);
-        bool rceCollision = ResolveCollisions(rce, obstacles);
+        bool cceCollision = ResolveCollisions(cceCircle, obstacles);
+        bool rceCollision = ResolveCollisions(rceCircle, obstacles);
 
-        vector<size_t> cceOverlapTiles = OverlapTiles(From(cce));
-        vector<size_t> rceOverlapTiles = OverlapTiles(From(rce));
+        vector<size_t> cceOverlapTiles = OverlapTiles(From(cceCircle));
+        vector<size_t> rceOverlapTiles = OverlapTiles(From(rceCircle));
         vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
         vector<size_t> rceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, rceOverlapTiles);
 
@@ -134,12 +129,12 @@ int main(void)
         }
 
         // Render entities
-        DrawCircle(cce, cceCollision ? RED : cceColor);
-        DrawCircle(rce, rceCollision ? RED : rceColor);
+        DrawCircle(cceCircle, cceCollision ? RED : cceColor);
+        DrawCircle(rceCircle, rceCollision ? RED : rceColor);
         DrawCircle(player, playerCollision ? RED : playerColor);
         DrawLineV(player.position, playerEnd, playerIntersection ? RED : playerColor);
-        DrawLineV(cce.position, cce.position + cceDirection * enemySightDistance, cceColor);
-        DrawLineV(rce.position, rce.position + rceDirection * enemySightDistance, rceColor);
+        DrawLineV(cce.pos, cce.pos + cce.dir * enemySightDistance, cceColor);
+        DrawLineV(rce.pos, rce.pos + rce.dir * enemySightDistance, rceColor);
 
         // Render obstacle intersections
         Vector2 obstaclesPoi;
@@ -165,8 +160,8 @@ int main(void)
         {
             rlImGuiBegin();
             ImGui::Checkbox("Use heatmap", &useDebug);
-            ImGui::SliderFloat2("CCE Position", (float*)&cce.position, 0.0f, 1200.0f);
-            ImGui::SliderFloat2("RCE Position", (float*)&rce.position, 0.0f, 1200.0f);
+            ImGui::SliderFloat2("CCE Position", (float*)&cce.pos, 0.0f, 1200.0f);
+            ImGui::SliderFloat2("RCE Position", (float*)&rce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
             ImGui::SliderFloat("Probe Distance", &enemyProbeDistance, 0.0f, 1500.0f);
             
@@ -357,10 +352,10 @@ Points LoadPoints(const char* path)
     return points;
 }
 
-void Patrol(const Points& points, Vector2& position, Vector2& direction, Rigidbody& body,
-    size_t& index, float maxSpeed, float maxRadians, float dt, float threshold)
+void Patrol(const Points& points, Rigidbody& rb, size_t& index, float maxSpeed, float maxRadians, float dt, float slowRadius, float pointRadius)
 {
     const Vector2& target = points[index];
-    ApplyArrive(target, position, direction, body, maxSpeed, maxRadians, dt);
-    index = Distance(position, target) <= threshold ? ++index % points.size() : index;
+    rb.acc = Arrive(target, rb, maxSpeed, slowRadius);
+    Integrate(rb, dt);
+    index = Distance(rb.pos, target) <= pointRadius ? ++index % points.size() : index;
 }

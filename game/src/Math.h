@@ -437,6 +437,13 @@ RMAPI Vector2 MoveTowards(Vector2 v, Vector2 target, float maxDistance)
     return result;
 }
 
+// Rotate max radians towards the target
+RMAPI Vector2 RotateTowards(Vector2 from, Vector2 to, float maxRadians)
+{
+    float deltaRadians = LineAngle(from, to);
+    return Rotate(from, fminf(deltaRadians, maxRadians) * Sign(Cross(from, to)));
+}
+
 // Invert the given vector
 RMAPI Vector2 Invert(Vector2 v)
 {
