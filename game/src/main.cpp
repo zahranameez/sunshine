@@ -15,6 +15,10 @@ constexpr int SCREEN_HEIGHT = 720;
 constexpr int TILE_WIDTH = SCREEN_WIDTH / GRID_LENGTH;
 constexpr int TILE_HEIGHT = SCREEN_HEIGHT / GRID_LENGTH;
 
+// Logging decisions is overkill cause multiple logs will be made each frame
+#define LOG_DECISIONS false
+#define LOG_ACTIONS true
+
 size_t ScreenToGrid(Vector2 point);
 Vector2 GridToScreen(size_t index);
 
@@ -34,37 +38,19 @@ bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
 Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles);
 Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius);
 
-/*class Node
-{
-public:
-    Node(Rigidbody& self, Rigidbody& enemy, float selfRadius, float enemyRadius) :
-        mSelf(self), mEnemy(enemy), mSelfRadius(selfRadius), mEnemyRadius(enemyRadius) {}
-    virtual Node* Evaluate() = 0;
-
-protected:
-    Rigidbody& mSelf;
-    Rigidbody& mEnemy;
-    float& mSelfRadius;
-    float& mEnemyRadius;
-};
-
-class DecisionNode : public Node
-{
-public:
-    DecisionNode(Rigidbody& self, Rigidbody& enemy, float selfRadius, float enemyRadius) :
-        Node(self, enemy, selfRadius, enemyRadius) {}
-    Node* yes = nullptr;
-    Node* no = nullptr;
-};
-
-class ActionNode : public Node
-{
-public:
-    ActionNode(Rigidbody& self, Rigidbody& enemy, float selfRadius, float enemyRadius) :
-        Node(self, enemy, selfRadius, enemyRadius) {}
-    Node* Evaluate() override { return nullptr; }
-    // nullptr because an action node is a leaf!
-};*/
+// Writes to the obstacle that point is inside of if true
+//bool InsideObstacle(const Vector2& point, const Obstacles& obstacles, Circle& obstacle)
+//{
+//    for (const Circle& circle : obstacles)
+//    {
+//        if (CheckCollisionPointCircle(point, circle))
+//        {
+//            obstacle = circle;
+//            return true;
+//        }
+//    }
+//    return false;
+//}
 
 struct EnemyData
 {
@@ -75,11 +61,168 @@ struct EnemyData
     float sightDistance;
     float probeDistance;
     float combatDistance;
+
+    string name;
 };
 
 struct PlayerData
 {
     float radius;
+};
+
+class Node
+{
+public:
+    Node(Rigidbody& self, EnemyData& selfData) : mSelf(self), mSelfData(selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) = 0;
+
+protected:
+    Rigidbody& mSelf;
+    EnemyData& mSelfData;
+};
+
+class Condition : public Node
+{
+public:
+    Condition(Rigidbody& self, EnemyData& selfData) : Node(self, selfData) {}
+    Node* yes = nullptr;
+    Node* no = nullptr;
+};
+
+class Action : public Node
+{
+public:
+    Action(Rigidbody& self, EnemyData& selfData) : Node(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        // nullptr because an action node is a leaf!
+        return nullptr;
+    }
+};
+
+class DetectedCondition : public Condition
+{
+public:
+    DetectedCondition(Rigidbody& self, EnemyData& selfData) : Condition(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        const Circle detectionCircle{ mSelf.pos, mSelfData.sightDistance };
+        const Circle enemyCircle{ enemy.pos, enemyData.radius };
+        return CheckCollisionCircles(detectionCircle, enemyCircle) ? yes : no;
+    }
+};
+
+// The tile search should be discarded and an FoV calculation should be done instead
+class VisibleCondition : public Condition
+{
+public:
+    VisibleCondition(Rigidbody& self, EnemyData& selfData) : Condition(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        // Doesn't take direction/FoV into account. An omniscient AI leads to better gameplay in this case!
+        Circle enemyCircle{ enemy.pos, enemyData.radius };
+        Vector2 sightEnd = mSelf.pos + Normalize(enemy.pos - mSelf.pos) * mSelfData.sightDistance;
+        return IsCircleVisible(mSelf.pos, sightEnd, enemyCircle, obstacles) ? yes : no;
+    }
+};
+
+class CombatCondition : public Condition
+{
+public:
+    CombatCondition(Rigidbody& self, EnemyData& selfData) : Condition(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        Circle selfCircle{ mSelf.pos, mSelfData.combatDistance };
+        Circle enemyCircle{ enemy.pos, enemyData.radius };
+        return CheckCollisionCircles(selfCircle, enemyCircle) ? yes : no;
+    }
+};
+
+class PatrolAction : public Action
+{
+public:
+    PatrolAction(Rigidbody& self, EnemyData& selfData) : Action(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        mSelf.acc = Patrol(points, mSelf, mSelfData.point, mSelfData.speed, 200.0f, 100.0f);
+#if LOG_ACTIONS
+        cout << mSelfData.name + " patrolling" << endl;
+#endif
+        return nullptr;
+    }
+};
+
+class VisibilityAction : public Action
+{
+public:
+    VisibilityAction(Rigidbody& self, EnemyData& selfData, Action& fallback) :
+        Action(self, selfData), mFallback(fallback) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        // Seek nearest enemy-visible tile
+        Rectangle area = From({ mSelf.pos, mSelfData.radius });
+        vector<size_t> overlap = OverlapTiles(area);
+        vector<size_t> visible = VisibleTiles({enemy.pos, enemyData.radius}, mSelfData.sightDistance, obstacles, overlap);
+        
+        // Ensure points aren't too close to obstacles
+        Points visiblePoints(visible.size());
+        for (size_t i = 0; i < visiblePoints.size(); i++)
+            visiblePoints[i] = GridToScreen(visible[i]) + Vector2{TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f};
+
+#if LOG_ACTIONS
+        if (!visiblePoints.empty())
+            cout << mSelfData.name + " finding visibility" << endl;
+        else
+            cout << mSelfData.name + " falling back" << endl;
+#endif
+
+        if (!visiblePoints.empty())
+        {
+            mSelf.acc = Seek(NearestPoint(mSelf.pos, visiblePoints), mSelf, mSelfData.speed);
+            return nullptr;
+        }
+        return mFallback.Evaluate(enemy, enemyData, points, obstacles);
+    }
+
+private:
+    Action& mFallback;
+};
+
+class TargetAction : public Action
+{
+public:
+    TargetAction(Rigidbody& self, EnemyData& selfData) : Action(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        mSelf.acc = Arrive(enemy.pos, mSelf, mSelfData.speed, 100.0f, 5.0f);
+#if LOG_ACTIONS
+        cout << mSelfData.name + " moving" << endl;
+#endif
+        return nullptr;
+    }
+};
+
+class CloseAttackAction : public Action
+{
+public:
+    CloseAttackAction(Rigidbody& self, EnemyData& selfData) : Action(self, selfData) {}
+    virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
+        const Points& points, const Obstacles& obstacles) override
+    {
+        mSelf.acc = Arrive(enemy.pos, mSelf, mSelfData.speed, 100.0f, 5.0f);
+#if LOG_ACTIONS
+        cout << mSelfData.name + " attacking" << endl;
+#endif
+        return nullptr;
+    }
 };
 
 void Melee(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
@@ -135,6 +278,15 @@ void Ranged(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, con
 
 }
 
+void Traverse(Node* node,
+    const Rigidbody& enemy, const PlayerData& enemyData, const Points& points, const Obstacles& obstacles)
+{
+    while (node != nullptr)
+    {
+        node = node->Evaluate(enemy, enemyData, points, obstacles);
+    }
+}
+
 int main(void)
 {
     Obstacles obstacles = LoadObstacles();
@@ -162,6 +314,7 @@ int main(void)
     ccd.sightDistance = 300.0f;
     ccd.probeDistance = 100.0f;
     ccd.combatDistance = 100.0f;
+    ccd.name = "Close-combat enemy";
 
     EnemyData rcd;
     rcd.point = 0;
@@ -170,6 +323,23 @@ int main(void)
     rcd.sightDistance = 300.0f;
     rcd.probeDistance = 100.0f;
     rcd.combatDistance = 400.0f;
+    rcd.name = "Ranged-combat enemy";
+
+    DetectedCondition cceIsPlayerDetected(cce, ccd);
+    VisibleCondition cceIsPlayerVisible(cce, ccd);
+    CombatCondition cceIsPlayerCombat(cce, ccd);
+    PatrolAction ccePatrol(cce, ccd);
+    VisibilityAction cceFindVisibility(cce, ccd, ccePatrol);
+    TargetAction cceArrive(cce, ccd);
+    CloseAttackAction cceAttack(cce, ccd);
+
+    Node* cceRoot = &cceIsPlayerDetected;
+    cceIsPlayerDetected.no = &ccePatrol;
+    cceIsPlayerDetected.yes = &cceIsPlayerVisible;
+    cceIsPlayerVisible.no = &cceFindVisibility;
+    cceIsPlayerVisible.yes = &cceIsPlayerCombat;
+    cceIsPlayerCombat.no = &cceArrive;
+    cceIsPlayerCombat.yes = &cceAttack;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -196,7 +366,8 @@ int main(void)
         player.position = GetMousePosition();
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        Melee(cce, ccd, { player.position }, { player.radius }, points, obstacles);
+        //Melee(cce, ccd, { player.position }, { player.radius }, points, obstacles);
+        Traverse(cceRoot, { player.position }, { player.radius }, points, obstacles);
         cce.acc = cce.acc + Avoid(cce, ccd.probeDistance, dt, obstacles);
         Integrate(cce, dt);
 
