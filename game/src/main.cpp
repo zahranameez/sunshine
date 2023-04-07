@@ -22,17 +22,118 @@ vector<size_t> OverlapTiles(Rectangle rectangle);
 vector<size_t> VisibleTiles(Circle target, float sightDistance,
     const Obstacles& obstacles, const vector<size_t>& tiles);
 
-bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
-bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
-
 void SaveObstacles(const Obstacles& obstacles, const char* path = "../game/assets/data/obstacles.txt");
 Obstacles LoadObstacles(const char* path = "../game/assets/data/obstacles.txt");
 
 void SavePoints(const Points& points, const char* path = "../game/assets/data/points.txt");
 Points LoadPoints(const char* path = "../game/assets/data/points.txt");
 
+bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
+bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
+
 Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles);
 Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius);
+
+/*class Node
+{
+public:
+    Node(Rigidbody& self, Rigidbody& enemy, float selfRadius, float enemyRadius) :
+        mSelf(self), mEnemy(enemy), mSelfRadius(selfRadius), mEnemyRadius(enemyRadius) {}
+    virtual Node* Evaluate() = 0;
+
+protected:
+    Rigidbody& mSelf;
+    Rigidbody& mEnemy;
+    float& mSelfRadius;
+    float& mEnemyRadius;
+};
+
+class DecisionNode : public Node
+{
+public:
+    DecisionNode(Rigidbody& self, Rigidbody& enemy, float selfRadius, float enemyRadius) :
+        Node(self, enemy, selfRadius, enemyRadius) {}
+    Node* yes = nullptr;
+    Node* no = nullptr;
+};
+
+class ActionNode : public Node
+{
+public:
+    ActionNode(Rigidbody& self, Rigidbody& enemy, float selfRadius, float enemyRadius) :
+        Node(self, enemy, selfRadius, enemyRadius) {}
+    Node* Evaluate() override { return nullptr; }
+    // nullptr because an action node is a leaf!
+};*/
+
+struct EnemyData
+{
+    float speed;
+    float radius;
+    size_t point;
+
+    float sightDistance;
+    float probeDistance;
+    float combatDistance;
+};
+
+struct PlayerData
+{
+    float radius;
+};
+
+void Melee(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
+    const Points& points, const Obstacles& obstacles)
+{
+    const Circle playerCircle{ player.pos, playerData.radius };
+
+    // Player detected?
+    if (CheckCollisionCircles({ enemy.pos, enemyData.sightDistance }, playerCircle))
+    {
+        // Player visible? (No FoV check or rotate till in FoV because this is complicated enough already)...
+        if (IsCircleVisible(enemy.pos, enemy.pos + Normalize(player.pos - enemy.pos) * enemyData.sightDistance,
+            playerCircle, obstacles))
+        {
+            // Within combat distance?
+            if (CheckCollisionCircles({ enemy.pos, enemyData.combatDistance }, playerCircle))
+            {
+                // Close attack (must still call arrive)
+                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
+                printf("Melee attacking player\n");
+            }
+            else
+            {
+                // Seek player
+                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
+                printf("Melee seeking player\n");
+            }
+        }
+        else
+        {
+            // Seek nearest visible tile
+            Rectangle area = From({ enemy.pos, enemyData.radius });
+            vector<size_t> overlap = OverlapTiles(area);
+            vector<size_t> visible = VisibleTiles(playerCircle, enemyData.sightDistance, obstacles, overlap);
+            Points points(visible.size());
+            for (size_t i = 0; i < points.size(); i++)
+                points[i] = GridToScreen(visible[i]);
+            if (!points.empty())
+                enemy.acc = Seek(NearestPoint(enemy.pos, points), enemy, enemyData.speed);
+            printf("Melee seeking visibility\n");
+        }
+    }
+    else
+    {
+        enemy.acc = Patrol(points, enemy, enemyData.point, enemyData.speed, 200.0f, 100.0f);
+        printf("Melee patrolling\n");
+    }
+}
+
+void Ranged(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
+    const Points& points, const Obstacles& obstacles)
+{
+
+}
 
 int main(void)
 {
@@ -44,17 +145,31 @@ int main(void)
     Vector2 playerDirection{ 1.0f, 0.0f };
     const float playerRotationSpeed = 100.0f;
 
-    float enemySightDistance = 300.0f;
-    float enemyProbeDistance = 100.0f;
-    const float enemyRadius = 50.0f;
-    const float enemySpeed = 300.0f;
     Rigidbody cce;
-    Rigidbody rce;
     cce.pos = { 1000.0f, 250.0f };
-    rce.pos = { 10.0f, 10.0f };
     cce.dir = { -1.0f, 0.0f };
+    cce.angularSpeed = DEG2RAD * 100.0f;
+
+    Rigidbody rce;
+    rce.pos = { 10.0f, 10.0f };
     rce.dir = { 1.0f, 0.0f };
-    cce.angularSpeed = rce.angularSpeed = DEG2RAD * 100.0f;
+    rce.angularSpeed = DEG2RAD * 100.0f;
+
+    EnemyData ccd;
+    ccd.point = 0;
+    ccd.speed = 300.0f;
+    ccd.radius = 50.0f;
+    ccd.sightDistance = 300.0f;
+    ccd.probeDistance = 100.0f;
+    ccd.combatDistance = 100.0f;
+
+    EnemyData rcd;
+    rcd.point = 0;
+    rcd.speed = 300.0f;
+    rcd.radius = 50.0f;
+    rcd.sightDistance = 300.0f;
+    rcd.probeDistance = 100.0f;
+    rcd.combatDistance = 400.0f;
 
     const Color playerColor = GREEN;
     const Color cceColor = BLUE;
@@ -81,14 +196,15 @@ int main(void)
         player.position = GetMousePosition();
         const Vector2 playerEnd = player.position + playerDirection * 500.0f;
 
-        cce.acc = Avoid(cce, enemyProbeDistance, dt, obstacles);
-        cce.acc = cce.acc + Arrive(player.position, cce, enemySpeed, 100.0f, 5.0f);
-        rce.acc = Patrol(points, rce, point, enemySpeed, 200.0f, 100.0f);
+        Melee(cce, ccd, { player.position }, { player.radius }, points, obstacles);
+        cce.acc = cce.acc + Avoid(cce, ccd.probeDistance, dt, obstacles);
         Integrate(cce, dt);
+
+        rce.acc = Patrol(points, rce, point, rcd.speed, 200.0f, 100.0f);
         Integrate(rce, dt);
 
-        Circle cceCircle{ cce.pos, enemyRadius };
-        Circle rceCircle{ rce.pos, enemyRadius };
+        Circle cceCircle{ cce.pos, ccd.radius };
+        Circle rceCircle{ rce.pos, rcd.radius };
 
         bool playerCollision = ResolveCollisions(player, obstacles);
         bool cceCollision = ResolveCollisions(cceCircle, obstacles);
@@ -96,8 +212,8 @@ int main(void)
 
         vector<size_t> cceOverlapTiles = OverlapTiles(From(cceCircle));
         vector<size_t> rceOverlapTiles = OverlapTiles(From(rceCircle));
-        vector<size_t> cceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, cceOverlapTiles);
-        vector<size_t> rceVisibleTiles = VisibleTiles(player, enemySightDistance, obstacles, rceOverlapTiles);
+        vector<size_t> cceVisibleTiles = VisibleTiles(player, ccd.sightDistance, obstacles, cceOverlapTiles);
+        vector<size_t> rceVisibleTiles = VisibleTiles(player, rcd.sightDistance, obstacles, rceOverlapTiles);
 
         vector<Vector2> intersections;
         for (const Circle& obstacle : obstacles)
@@ -132,8 +248,8 @@ int main(void)
         DrawCircle(rceCircle, rceCollision ? RED : rceColor);
         DrawCircle(player, playerCollision ? RED : playerColor);
         DrawLineV(player.position, playerEnd, playerIntersection ? RED : playerColor);
-        DrawLineV(cce.pos, cce.pos + cce.dir * enemySightDistance, cceColor);
-        DrawLineV(rce.pos, rce.pos + rce.dir * enemySightDistance, rceColor);
+        DrawLineV(cce.pos, cce.pos + cce.dir * ccd.sightDistance, cceColor);
+        DrawLineV(rce.pos, rce.pos + rce.dir * rcd.sightDistance, rceColor);
 
         // Render obstacle intersections
         Vector2 obstaclesPoi;
@@ -161,8 +277,8 @@ int main(void)
             ImGui::Checkbox("Use heatmap", &useDebug);
             ImGui::SliderFloat2("CCE Position", (float*)&cce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.pos, 0.0f, 1200.0f);
-            ImGui::SliderFloat("Sight Distance", &enemySightDistance, 0.0f, 1500.0f);
-            ImGui::SliderFloat("Probe Distance", &enemyProbeDistance, 0.0f, 1500.0f);
+            ImGui::SliderFloat("CCE Sight Distance", &ccd.sightDistance, 0.0f, 1500.0f);
+            ImGui::SliderFloat("RCE Sight Distance", &rcd.sightDistance, 0.0f, 1500.0f);
             
             ImGui::Separator();
             if (ImGui::Button("Save Obstacles"))
@@ -213,16 +329,18 @@ Vector2 GridToScreen(size_t index)
 
 vector<size_t> OverlapTiles(Rectangle rectangle)
 {
+    if (rectangle.x < 0.0f) rectangle.x = 0.0f;
+    if (rectangle.y < 0.0f) rectangle.y = 0.0f;
+    if (rectangle.x + rectangle.width > SCREEN_WIDTH) rectangle.x = SCREEN_WIDTH - rectangle.width;
+    if (rectangle.y + rectangle.height > SCREEN_HEIGHT) rectangle.y = SCREEN_HEIGHT - rectangle.height;
+
     const size_t colMin = rectangle.x / TILE_WIDTH;
-    const size_t colMax = ((rectangle.x + rectangle.width) / TILE_WIDTH) > GRID_LENGTH ?
-        GRID_LENGTH : (rectangle.x + rectangle.width) / TILE_WIDTH;
     const size_t rowMin = rectangle.y / TILE_HEIGHT;
+    const size_t colMax = (rectangle.x + rectangle.width) / TILE_WIDTH;
     const size_t rowMax = (rectangle.y + rectangle.height) / TILE_HEIGHT;
-    const size_t width = colMax - colMin;
-    const size_t height = rowMax - rowMin;
 
     vector<size_t> indices;
-    indices.reserve(width * height);
+    indices.reserve((colMax - colMin) * (rowMax - rowMin));
     for (size_t row = rowMin; row < rowMax; row++)
     {
         for (size_t col = colMin; col < colMax; col++)
@@ -245,6 +363,50 @@ vector<size_t> VisibleTiles(Circle target, float sightDistance,
         if (IsCircleVisible(tileCenter, tileEnd, target, obstacles)) visibilityTiles.push_back(i);
     }
     return visibilityTiles;
+}
+
+void SaveObstacles(const Obstacles& obstacles, const char* path)
+{
+    ofstream file(path, ios::out | ios::trunc);
+    for (const Circle& obstacle : obstacles)
+        file << obstacle.position.x << " " << obstacle.position.y << " " << obstacle.radius << endl;
+    file.close();
+}
+
+Obstacles LoadObstacles(const char* path)
+{
+    Obstacles obstacles;
+    ifstream file(path);
+    while (!file.eof())
+    {
+        Circle obstacle;
+        file >> obstacle.position.x >> obstacle.position.y >> obstacle.radius;
+        obstacles.push_back(std::move(obstacle));
+    }
+    file.close();
+    return obstacles;
+}
+
+void SavePoints(const Points& points, const char* path)
+{
+    ofstream file(path, ios::out | ios::trunc);
+    for (const Vector2& point : points)
+        file << point.x << " " << point.y << endl;
+    file.close();
+}
+
+Points LoadPoints(const char* path)
+{
+    Points points;
+    ifstream file(path);
+    while (!file.eof())
+    {
+        Vector2 point;
+        file >> point.x >> point.y;
+        points.push_back(std::move(point));
+    }
+    file.close();
+    return points;
 }
 
 bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
@@ -290,50 +452,6 @@ Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacle
     if (avoid(-30.0f, acc)) return acc;
     if (avoid( 30.0f, acc)) return acc;
     return acc;
-}
-
-void SaveObstacles(const Obstacles& obstacles, const char* path)
-{
-    ofstream file(path, ios::out | ios::trunc);
-    for (const Circle& obstacle : obstacles)
-        file << obstacle.position.x << " " << obstacle.position.y << " " << obstacle.radius << endl;
-    file.close();
-}
-
-Obstacles LoadObstacles(const char* path)
-{
-    Obstacles obstacles;
-    ifstream file(path);
-    while (!file.eof())
-    {
-        Circle obstacle;
-        file >> obstacle.position.x >> obstacle.position.y >> obstacle.radius;
-        obstacles.push_back(std::move(obstacle));
-    }
-    file.close();
-    return obstacles;
-}
-
-void SavePoints(const Points& points, const char* path)
-{
-    ofstream file(path, ios::out | ios::trunc);
-    for (const Vector2& point : points)
-        file << point.x << " " << point.y << endl;
-    file.close();
-}
-
-Points LoadPoints(const char* path)
-{
-    Points points;
-    ifstream file(path);
-    while (!file.eof())
-    {
-        Vector2 point;
-        file >> point.x >> point.y;
-        points.push_back(std::move(point));
-    }
-    file.close();
-    return points;
 }
 
 Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius)

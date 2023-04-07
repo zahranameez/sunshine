@@ -107,9 +107,19 @@ bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle,
     return false;
 }
 
+Vector2 NearestPoint(const Vector2& point, const Points& points)
+{
+    assert(!points.empty());
+    return *min_element(points.begin(), points.end(),
+        [&point](const Vector2& a, const Vector2& b) -> bool
+        {
+            return DistanceSqr(a, point) < DistanceSqr(b, point);
+        });
+}
+
 bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles, Vector2& poi)
 {
-    std::vector<Vector2> intersections;
+    Points intersections;
     intersections.reserve(obstacles.size());
 
     for (const Circle& obstacle : obstacles)
@@ -120,15 +130,7 @@ bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& ob
     }
 
     if (!intersections.empty())
-    {
-        poi = *std::min_element(intersections.begin(), intersections.end(),
-            [&lineStart](const Vector2& a, const Vector2& b)
-            {
-                return DistanceSqr(lineStart, a) < DistanceSqr(lineStart, b);
-            }
-        );
-    }
-
+        poi = NearestPoint(lineStart, intersections);
     return !intersections.empty();
 }
 
