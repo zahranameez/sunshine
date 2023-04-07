@@ -23,7 +23,7 @@ size_t ScreenToGrid(Vector2 point);
 Vector2 GridToScreen(size_t index);
 
 vector<size_t> OverlapTiles(Rectangle rectangle);
-vector<size_t> VisibleTiles(Circle target, float sightDistance,
+vector<size_t> VisibleTiles(Circle target, float detectionRadius,
     const Obstacles& obstacles, const vector<size_t>& tiles);
 
 void SaveObstacles(const Obstacles& obstacles, const char* path = "../game/assets/data/obstacles.txt");
@@ -33,24 +33,10 @@ void SavePoints(const Points& points, const char* path = "../game/assets/data/po
 Points LoadPoints(const char* path = "../game/assets/data/points.txt");
 
 bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
-bool ResolveCollisions(Circle& circle, const Obstacles& obstacles);
+bool ResolveCollisions(Vector2& point, float radius, const Obstacles& obstacles);
 
-Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles);
+Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles);
 Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius);
-
-// Writes to the obstacle that point is inside of if true
-//bool InsideObstacle(const Vector2& point, const Obstacles& obstacles, Circle& obstacle)
-//{
-//    for (const Circle& circle : obstacles)
-//    {
-//        if (CheckCollisionPointCircle(point, circle))
-//        {
-//            obstacle = circle;
-//            return true;
-//        }
-//    }
-//    return false;
-//}
 
 struct EnemyData
 {
@@ -58,9 +44,9 @@ struct EnemyData
     float radius;
     size_t point;
 
-    float sightDistance;
-    float probeDistance;
-    float combatDistance;
+    float detectionRadius;
+    float combatRadius;
+    float probeLength;
 
     string name;
 };
@@ -109,7 +95,7 @@ public:
     virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
         const Points& points, const Obstacles& obstacles) override
     {
-        const Circle detectionCircle{ mSelf.pos, mSelfData.sightDistance };
+        const Circle detectionCircle{ mSelf.pos, mSelfData.detectionRadius };
         const Circle enemyCircle{ enemy.pos, enemyData.radius };
         return CheckCollisionCircles(detectionCircle, enemyCircle) ? yes : no;
     }
@@ -125,8 +111,8 @@ public:
     {
         // Doesn't take direction/FoV into account. An omniscient AI leads to better gameplay in this case!
         Circle enemyCircle{ enemy.pos, enemyData.radius };
-        Vector2 sightEnd = mSelf.pos + Normalize(enemy.pos - mSelf.pos) * mSelfData.sightDistance;
-        return IsCircleVisible(mSelf.pos, sightEnd, enemyCircle, obstacles) ? yes : no;
+        Vector2 detectionEnd = mSelf.pos + Normalize(enemy.pos - mSelf.pos) * mSelfData.detectionRadius;
+        return IsCircleVisible(mSelf.pos, detectionEnd, enemyCircle, obstacles) ? yes : no;
     }
 };
 
@@ -137,7 +123,7 @@ public:
     virtual Node* Evaluate(const Rigidbody& enemy, const PlayerData& enemyData,
         const Points& points, const Obstacles& obstacles) override
     {
-        Circle selfCircle{ mSelf.pos, mSelfData.combatDistance };
+        Circle selfCircle{ mSelf.pos, mSelfData.combatRadius };
         Circle enemyCircle{ enemy.pos, enemyData.radius };
         return CheckCollisionCircles(selfCircle, enemyCircle) ? yes : no;
     }
@@ -167,9 +153,9 @@ public:
         const Points& points, const Obstacles& obstacles) override
     {
         // Seek nearest enemy-visible tile
-        Rectangle area = From({ mSelf.pos, mSelfData.radius });
+        Rectangle area = From({ mSelf.pos, mSelfData.detectionRadius });
         vector<size_t> overlap = OverlapTiles(area);
-        vector<size_t> visible = VisibleTiles({enemy.pos, enemyData.radius}, mSelfData.sightDistance, obstacles, overlap);
+        vector<size_t> visible = VisibleTiles({enemy.pos, enemyData.radius}, mSelfData.detectionRadius, obstacles, overlap);
         
         // Ensure points aren't too close to obstacles
         Points visiblePoints(visible.size());
@@ -225,59 +211,6 @@ public:
     }
 };
 
-void Melee(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
-    const Points& points, const Obstacles& obstacles)
-{
-    const Circle playerCircle{ player.pos, playerData.radius };
-
-    // Player detected?
-    if (CheckCollisionCircles({ enemy.pos, enemyData.sightDistance }, playerCircle))
-    {
-        // Player visible? (No FoV check or rotate till in FoV because this is complicated enough already)...
-        if (IsCircleVisible(enemy.pos, enemy.pos + Normalize(player.pos - enemy.pos) * enemyData.sightDistance,
-            playerCircle, obstacles))
-        {
-            // Within combat distance?
-            if (CheckCollisionCircles({ enemy.pos, enemyData.combatDistance }, playerCircle))
-            {
-                // Close attack (must still call arrive)
-                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
-                printf("Melee attacking player\n");
-            }
-            else
-            {
-                // Seek player
-                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
-                printf("Melee seeking player\n");
-            }
-        }
-        else
-        {
-            // Seek nearest visible tile
-            Rectangle area = From({ enemy.pos, enemyData.radius });
-            vector<size_t> overlap = OverlapTiles(area);
-            vector<size_t> visible = VisibleTiles(playerCircle, enemyData.sightDistance, obstacles, overlap);
-            Points points(visible.size());
-            for (size_t i = 0; i < points.size(); i++)
-                points[i] = GridToScreen(visible[i]);
-            if (!points.empty())
-                enemy.acc = Seek(NearestPoint(enemy.pos, points), enemy, enemyData.speed);
-            printf("Melee seeking visibility\n");
-        }
-    }
-    else
-    {
-        enemy.acc = Patrol(points, enemy, enemyData.point, enemyData.speed, 200.0f, 100.0f);
-        printf("Melee patrolling\n");
-    }
-}
-
-void Ranged(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
-    const Points& points, const Obstacles& obstacles)
-{
-
-}
-
 void Traverse(Node* node,
     const Rigidbody& enemy, const PlayerData& enemyData, const Points& points, const Obstacles& obstacles)
 {
@@ -311,18 +244,18 @@ int main(void)
     ccd.point = 0;
     ccd.speed = 300.0f;
     ccd.radius = 50.0f;
-    ccd.sightDistance = 300.0f;
-    ccd.probeDistance = 100.0f;
-    ccd.combatDistance = 100.0f;
+    ccd.detectionRadius = 300.0f;
+    ccd.probeLength = 100.0f;
+    ccd.combatRadius = 100.0f;
     ccd.name = "Close-combat enemy";
 
     EnemyData rcd;
     rcd.point = 0;
     rcd.speed = 300.0f;
     rcd.radius = 50.0f;
-    rcd.sightDistance = 300.0f;
-    rcd.probeDistance = 100.0f;
-    rcd.combatDistance = 400.0f;
+    rcd.detectionRadius = 300.0f;
+    rcd.probeLength = 100.0f;
+    rcd.combatRadius = 400.0f;
     rcd.name = "Ranged-combat enemy";
 
     DetectedCondition cceIsPlayerDetected(cce, ccd);
@@ -341,10 +274,16 @@ int main(void)
     cceIsPlayerCombat.no = &cceArrive;
     cceIsPlayerCombat.yes = &cceAttack;
 
-    const Color playerColor = GREEN;
-    const Color cceColor = BLUE;
-    const Color rceColor = VIOLET;
     const Color background = RAYWHITE;
+    const Color playerColor = { 0, 228, 48, 128 };          // GREEN
+
+    const Color cceColor = { 0, 121, 241, 128 };            // BLUE
+    const Color cceOverlapColor = { 0, 82, 172, 128 };      // DARKBLUE
+    const Color cceVisibleColor = { 102, 191, 255, 128 };   // SKYBLUE
+
+    const Color rceColor = { 135, 60, 190, 128 };           // VIOLET
+    const Color rceOverlapColor = { 112, 31, 126, 128 };    // DARKPURPLE
+    const Color rceVisibleColor = { 200, 122, 255, 128 };   // PURPLE
 
     bool useDebug = true;
     bool useGUI = false;
@@ -368,23 +307,21 @@ int main(void)
 
         //Melee(cce, ccd, { player.position }, { player.radius }, points, obstacles);
         Traverse(cceRoot, { player.position }, { player.radius }, points, obstacles);
-        cce.acc = cce.acc + Avoid(cce, ccd.probeDistance, dt, obstacles);
+        cce.acc = cce.acc + Avoid(cce, ccd.probeLength, dt, obstacles);
         Integrate(cce, dt);
 
         rce.acc = Patrol(points, rce, point, rcd.speed, 200.0f, 100.0f);
+        rce.acc = rce.acc + Avoid(rce, rcd.probeLength, dt, obstacles);
         Integrate(rce, dt);
 
-        Circle cceCircle{ cce.pos, ccd.radius };
-        Circle rceCircle{ rce.pos, rcd.radius };
+        bool playerCollision = ResolveCollisions(player.position, player.radius, obstacles);
+        bool cceCollision = ResolveCollisions(cce.pos, ccd.radius, obstacles);
+        bool rceCollision = ResolveCollisions(rce.pos, ccd.radius, obstacles);
 
-        bool playerCollision = ResolveCollisions(player, obstacles);
-        bool cceCollision = ResolveCollisions(cceCircle, obstacles);
-        bool rceCollision = ResolveCollisions(rceCircle, obstacles);
-
-        vector<size_t> cceOverlapTiles = OverlapTiles(From(cceCircle));
-        vector<size_t> rceOverlapTiles = OverlapTiles(From(rceCircle));
-        vector<size_t> cceVisibleTiles = VisibleTiles(player, ccd.sightDistance, obstacles, cceOverlapTiles);
-        vector<size_t> rceVisibleTiles = VisibleTiles(player, rcd.sightDistance, obstacles, rceOverlapTiles);
+        vector<size_t> cceOverlapTiles = OverlapTiles(From({ cce.pos, ccd.detectionRadius }));
+        vector<size_t> rceOverlapTiles = OverlapTiles(From({ rce.pos, rcd.detectionRadius }));
+        vector<size_t> cceVisibleTiles = VisibleTiles(player, ccd.detectionRadius, obstacles, cceOverlapTiles);
+        vector<size_t> rceVisibleTiles = VisibleTiles(player, rcd.detectionRadius, obstacles, rceOverlapTiles);
 
         vector<Vector2> intersections;
         for (const Circle& obstacle : obstacles)
@@ -402,25 +339,35 @@ int main(void)
         if (useDebug)
         {
             for (size_t i : cceOverlapTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, DARKBLUE);
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceOverlapColor);
 
             for (size_t i : cceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, SKYBLUE);
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
 
             for (size_t i : rceOverlapTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, DARKPURPLE);
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceOverlapColor);
 
             for (size_t i : rceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, PURPLE);
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
         }
 
         // Render entities
-        DrawCircle(cceCircle, cceCollision ? RED : cceColor);
-        DrawCircle(rceCircle, rceCollision ? RED : rceColor);
-        DrawCircle(player, playerCollision ? RED : playerColor);
-        DrawLineV(player.position, playerEnd, playerIntersection ? RED : playerColor);
-        DrawLineV(cce.pos, cce.pos + cce.dir * ccd.sightDistance, cceColor);
-        DrawLineV(rce.pos, rce.pos + rce.dir * rcd.sightDistance, rceColor);
+        DrawCircleV(cce.pos, ccd.radius, cceCollision ? RED : cceColor);
+        DrawCircleV(rce.pos, rcd.radius, rceCollision ? RED : rceColor);
+        DrawCircleV(player.position, player.radius, playerCollision ? RED : playerColor);
+        DrawLineEx(player.position, playerEnd, 10.0f, playerIntersection ? RED : playerColor);
+        DrawLineEx(cce.pos, cce.pos + cce.dir * ccd.detectionRadius, 10.0f, cceColor);
+        DrawLineEx(rce.pos, rce.pos + rce.dir * rcd.detectionRadius, 10.0f, rceColor);
+
+        // Avoidance lines
+        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel), -30.0f * DEG2RAD) * ccd.probeLength, 5.0f, cceColor);
+        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel), -15.0f * DEG2RAD) * ccd.probeLength, 5.0f, cceColor);
+        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel),  15.0f * DEG2RAD) * ccd.probeLength, 5.0f, cceColor);
+        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel),  30.0f * DEG2RAD) * ccd.probeLength, 5.0f, cceColor);
+        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel), -30.0f * DEG2RAD) * rcd.probeLength, 5.0f, rceColor);
+        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel), -15.0f * DEG2RAD) * rcd.probeLength, 5.0f, rceColor);
+        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel),  15.0f * DEG2RAD) * rcd.probeLength, 5.0f, rceColor);
+        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel),  30.0f * DEG2RAD) * rcd.probeLength, 5.0f, rceColor);
 
         // Render obstacle intersections
         Vector2 obstaclesPoi;
@@ -448,8 +395,10 @@ int main(void)
             ImGui::Checkbox("Use heatmap", &useDebug);
             ImGui::SliderFloat2("CCE Position", (float*)&cce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.pos, 0.0f, 1200.0f);
-            ImGui::SliderFloat("CCE Sight Distance", &ccd.sightDistance, 0.0f, 1500.0f);
-            ImGui::SliderFloat("RCE Sight Distance", &rcd.sightDistance, 0.0f, 1500.0f);
+            ImGui::SliderFloat("CCE Detection Radius", &ccd.detectionRadius, 0.0f, 1500.0f);
+            ImGui::SliderFloat("RCE Detection Radius", &rcd.detectionRadius, 0.0f, 1500.0f);
+            ImGui::SliderFloat("CCE Probe Length", &ccd.probeLength, 0.0f, 250.0f);
+            ImGui::SliderFloat("RCE Probe Length", &rcd.probeLength, 0.0f, 250.0f);
             
             ImGui::Separator();
             if (ImGui::Button("Save Obstacles"))
@@ -522,7 +471,7 @@ vector<size_t> OverlapTiles(Rectangle rectangle)
     return indices;
 }
 
-vector<size_t> VisibleTiles(Circle target, float sightDistance,
+vector<size_t> VisibleTiles(Circle target, float detectionRadius,
     const Obstacles& obstacles, const vector<size_t>& tiles)
 {
     vector<size_t> visibilityTiles;
@@ -530,7 +479,7 @@ vector<size_t> VisibleTiles(Circle target, float sightDistance,
     for (size_t i : tiles)
     {
         Vector2 tileCenter = GridToScreen(i) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
-        Vector2 tileEnd = tileCenter + Normalize(target.position - tileCenter) * sightDistance;
+        Vector2 tileEnd = tileCenter + Normalize(target.position - tileCenter) * detectionRadius;
         if (IsCircleVisible(tileCenter, tileEnd, target, obstacles)) visibilityTiles.push_back(i);
     }
     return visibilityTiles;
@@ -590,25 +539,25 @@ bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
     return false;
 }
 
-bool ResolveCollisions(Circle& circle, const Obstacles& obstacles)
+bool ResolveCollisions(Vector2& position, float radius, const Obstacles& obstacles)
 {
     for (const Circle& obstacle : obstacles)
     {
         Vector2 mtv;
-        if (CheckCollisionCircles(obstacle, circle, mtv))
+        if (CheckCollisionCircles(obstacle, {position, radius}, mtv))
         {
-            circle.position = circle.position + mtv;
+            position = position + mtv;
             return true;
         }
     }
     return false;
 }
 
-Vector2 Avoid(const Rigidbody& rb, float probeDistance, float dt, const Obstacles& obstacles)
+Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles)
 {
     auto avoid = [&](float angle, Vector2& acc) -> bool
     {
-        if (IsCollision(rb.pos, rb.pos + Rotate(Normalize(rb.vel), angle * DEG2RAD) * probeDistance, obstacles))
+        if (IsCollision(rb.pos, rb.pos + Rotate(Normalize(rb.vel), angle * DEG2RAD) * probeLength, obstacles))
         {
             const Vector2 vf = Rotate(Normalize(rb.vel), rb.angularSpeed * dt * Sign(-angle)) * Length(rb.vel);
             acc = Acceleration(rb.vel, vf, dt);
@@ -630,3 +579,60 @@ Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float m
     index = Distance(rb.pos, points[index]) <= pointRadius ? ++index % points.size() : index;
     return Arrive(points[index], rb, maxSpeed, slowRadius);
 }
+
+// Sooooooo much less code thant the decision tree...
+// Perhaps give this to students and ask them to implement this as a decision tree for future assignment 3?
+/*
+void Melee(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
+    const Points& points, const Obstacles& obstacles)
+{
+    const Circle playerCircle{ player.pos, playerData.radius };
+
+    // Player detected?
+    if (CheckCollisionCircles({ enemy.pos, enemyData.sightDistance }, playerCircle))
+    {
+        // Player visible? (No FoV check or rotate till in FoV because this is complicated enough already)...
+        if (IsCircleVisible(enemy.pos, enemy.pos + Normalize(player.pos - enemy.pos) * enemyData.sightDistance,
+            playerCircle, obstacles))
+        {
+            // Within combat distance?
+            if (CheckCollisionCircles({ enemy.pos, enemyData.combatDistance }, playerCircle))
+            {
+                // Close attack (must still call arrive)
+                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
+                printf("Melee attacking player\n");
+            }
+            else
+            {
+                // Seek player
+                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
+                printf("Melee seeking player\n");
+            }
+        }
+        else
+        {
+            // Seek nearest visible tile
+            Rectangle area = From({ enemy.pos, enemyData.radius });
+            vector<size_t> overlap = OverlapTiles(area);
+            vector<size_t> visible = VisibleTiles(playerCircle, enemyData.sightDistance, obstacles, overlap);
+            Points points(visible.size());
+            for (size_t i = 0; i < points.size(); i++)
+                points[i] = GridToScreen(visible[i]);
+            if (!points.empty())
+                enemy.acc = Seek(NearestPoint(enemy.pos, points), enemy, enemyData.speed);
+            printf("Melee seeking visibility\n");
+        }
+    }
+    else
+    {
+        enemy.acc = Patrol(points, enemy, enemyData.point, enemyData.speed, 200.0f, 100.0f);
+        printf("Melee patrolling\n");
+    }
+}
+
+void Ranged(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
+    const Points& points, const Obstacles& obstacles)
+{
+
+}
+*/
