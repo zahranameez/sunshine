@@ -166,6 +166,7 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
     if (mTimer.Expired())
     {
         mTimer.Reset();
+        PlaySound(mSound);
 
         Projectile center;
         Projectile right;
@@ -180,13 +181,14 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
         right.pos = mSelf.pos + right.dir * mSelf.radius;
         left.pos = mSelf.pos + left.dir * mSelf.radius;
 
-        const float speed = 250.0f;
+        const float speed = 500.0f;
         left.vel = left.dir * speed;
         right.vel = right.dir * speed;
         center.vel = center.dir * speed;
 
         left.radius = right.radius = center.radius = 10.0f;
         left.damage = right.damage = center.damage = 50.0f;
+        //left.acc = right.acc = center.acc = center.dir * 1000.0f;
 
         world.projectiles.push_back(std::move(left));
         world.projectiles.push_back(std::move(right));

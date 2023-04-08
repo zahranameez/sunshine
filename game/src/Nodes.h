@@ -133,9 +133,9 @@ public:
 class CloseAttackAction : public Action
 {
 public:
-    CloseAttackAction(Enemy& self) : Action(self)
+    CloseAttackAction(Enemy& self, const Sound& sound) : Action(self), mSound(sound)
     {
-        mTimer.duration = 2.5f;
+        mTimer.duration = 0.05f;
         mTimer.elapsed = mTimer.duration;
     }
 
@@ -144,6 +144,7 @@ public:
 
 private:
     Timer mTimer;
+    const Sound& mSound;
 };
 
 class RangedAttackAction : public Action

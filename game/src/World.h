@@ -25,18 +25,9 @@ struct Entity : public Rigidbody
     float radius = 0.0f;
     Circle Collider() const { return { pos, radius }; }
 
-    const float maxHealth = 100.0f;
-    float health = maxHealth;
+    float maxHealth = 100.0f;
+    float health = 100.0f;
     float HealthPercent() const { return health / maxHealth; }
-
-    // Copy-assignment needed because compiler doesn't know whether to copy-initialized health to maxHealth or entity.health
-    Entity& operator=(const Entity& entity)
-    {
-        name = entity.name;
-        radius = entity.radius;
-        health = entity.health;
-        return *this;
-    }
 };
 
 struct Enemy : public Entity

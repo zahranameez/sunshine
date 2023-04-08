@@ -5,6 +5,7 @@
 #include "Grid.h"
 #include "World.h"
 #include "Nodes.h"
+#include <iostream>
 
 using namespace std;
 
@@ -71,6 +72,11 @@ void CenterText(const char* text, Rectangle rec, int fontSize, Color color)
 
 int main(void)
 {
+    InitAudioDevice();
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
+    rlImGuiSetup(true);
+    SetTargetFPS(60);
+
     World world;
     world.obstacles = LoadObstacles();
     world.points = LoadPoints();
@@ -86,7 +92,7 @@ int main(void)
     cce.dir = { -1.0f, 0.0f };
     cce.angularSpeed = DEG2RAD * 200.0f;
     cce.point = 0;
-    cce.speed = 300.0f;
+    cce.speed = 500.0f;
     cce.radius = 50.0f;
     cce.detectionRadius = 300.0f;
     cce.probeLength = 100.0f;
@@ -105,6 +111,9 @@ int main(void)
     rce.combatRadius = 400.0f;
     rce.name = "Ranged-combat enemy";
 
+    Sound shotgunSound = LoadSound("../game/assets/audio/shotgun.wav");
+    Sound sniperSound = LoadSound("../game/assets/audio/sniper.wav");
+
     DetectedCondition cceIsPlayerDetected(cce);
     VisibleCondition cceIsPlayerVisible(cce);
     CloseCombatCondition cceIsPlayerCombat(cce);
@@ -112,7 +121,7 @@ int main(void)
     PatrolAction ccePatrol(cce);
     FindVisibilityAction cceFindVisibility(cce, &ccePatrol);
     ArriveAction cceArrive(cce);
-    CloseAttackAction cceAttack(cce);
+    CloseAttackAction cceAttack(cce, shotgunSound);
 
     PatrolAction rcePatrol(rce);
 
@@ -138,9 +147,6 @@ int main(void)
     bool useDebug = true;
     bool useGUI = false;
     bool showPoints = false;
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
-    rlImGuiSetup(true);
-    SetTargetFPS(60);
     while (!WindowShouldClose())
     {
         const float dt = GetFrameTime();
@@ -155,25 +161,22 @@ int main(void)
         const Vector2 playerEnd = player.pos + player.dir * 500.0f;
 
         Traverse(cceRoot, player, world);
-        cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
+        //cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
         Integrate(cce, dt);
 
         Traverse(&rcePatrol, player, world);
-        rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
+        //rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
         Integrate(rce, dt);
 
         for (Projectile& projectile : world.projectiles)
             Integrate(projectile, dt);
 
         world.projectiles.erase(
-            std::remove_if(world.projectiles.begin(), world.projectiles.end(),
-                [&player, &world](const Projectile& projectile)
+            remove_if(world.projectiles.begin(), world.projectiles.end(),
+                [&player, &world](const Projectile& projectile) -> bool
                 {
                     if (CheckCollisionCircles(player.Collider(), projectile.Collider()))
-                    {
-                        player.health -= projectile.damage;
                         return true;
-                    }
 
                     for (const Circle& obstacle : world.obstacles)
                     {
@@ -181,9 +184,9 @@ int main(void)
                             return true;
                     }
 
-                    
-                    return !CheckCollisionCircleRec(projectile.pos, projectile.radius, SCREEN_REC);
-            }),
+                    return !CheckCollisionPointRec(projectile.pos, SCREEN_REC);
+                }
+            ),
         world.projectiles.end());
 
         bool playerCollision = ResolveCollisions(player, world.obstacles);
@@ -249,7 +252,7 @@ int main(void)
         DrawLineEx(cce.pos, cce.pos + cce.dir * cce.detectionRadius, 10.0f, cceColor);
         DrawLineEx(rce.pos, rce.pos + rce.dir * rce.detectionRadius, 10.0f, rceColor);
         DrawLineEx(player.pos, playerEnd, 10.0f, playerIntersection ? RED : playerColor);
-        for (Entity& projectile : world.projectiles)
+        for (const Projectile& projectile : world.projectiles)
             DrawCircleV(projectile.pos, projectile.radius, RED);
 
         // Health bars
@@ -330,62 +333,9 @@ int main(void)
     rlImGuiShutdown();
     CloseWindow();
 
+    UnloadSound(sniperSound);
+    UnloadSound(shotgunSound);
+    CloseAudioDevice();
+
     return 0;
 }
-
-// Sooooooo much less code thant the decision tree...
-// Perhaps give this to students and ask them to implement this as a decision tree for future assignment 3?
-/*
-void Melee(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
-    const Points& points, const Obstacles& obstacles)
-{
-    const Circle playerCircle{ player.pos, playerData.radius };
-
-    // Player detected?
-    if (CheckCollisionCircles({ enemy.pos, enemyData.sightDistance }, playerCircle))
-    {
-        // Player visible? (No FoV check or rotate till in FoV because this is complicated enough already)...
-        if (IsCircleVisible(enemy.pos, enemy.pos + Normalize(player.pos - enemy.pos) * enemyData.sightDistance,
-            playerCircle, obstacles))
-        {
-            // Within combat distance?
-            if (CheckCollisionCircles({ enemy.pos, enemyData.combatDistance }, playerCircle))
-            {
-                // Close attack (must still call arrive)
-                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
-                printf("Melee attacking player\n");
-            }
-            else
-            {
-                // Seek player
-                enemy.acc = Arrive(player.pos, enemy, enemyData.speed, 100.0f, 5.0f);
-                printf("Melee seeking player\n");
-            }
-        }
-        else
-        {
-            // Seek nearest visible tile
-            Rectangle area = From({ enemy.pos, enemyData.radius });
-            vector<size_t> overlap = OverlapTiles(area);
-            vector<size_t> visible = VisibleTiles(playerCircle, enemyData.sightDistance, obstacles, overlap);
-            Points points(visible.size());
-            for (size_t i = 0; i < points.size(); i++)
-                points[i] = GridToScreen(visible[i]);
-            if (!points.empty())
-                enemy.acc = Seek(NearestPoint(enemy.pos, points), enemy, enemyData.speed);
-            printf("Melee seeking visibility\n");
-        }
-    }
-    else
-    {
-        enemy.acc = Patrol(points, enemy, enemyData.point, enemyData.speed, 200.0f, 100.0f);
-        printf("Melee patrolling\n");
-    }
-}
-
-void Ranged(Rigidbody& enemy, EnemyData& enemyData, const Rigidbody& player, const PlayerData& playerData,
-    const Points& points, const Obstacles& obstacles)
-{
-
-}
-*/
