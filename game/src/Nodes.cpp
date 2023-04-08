@@ -3,7 +3,6 @@
 #include "Grid.h"
 #include <cassert>
 #include <iostream>
-#define LOG_ACTIONS true
 
 Node* DetectedCondition::Evaluate(const Entity& entity, World& world)
 {
@@ -42,7 +41,10 @@ Node* PatrolAction::Evaluate(const Entity& entity, World& world)
         }
         mSelf.point = min;
     }
-    mSelf.acc = Patrol(world.points, mSelf, mSelf.point, mSelf.speed, 200.0f, 100.0f);
+
+    size_t& index = mSelf.point;
+    index = Distance(mSelf.pos, world.points[index]) <= 100.0f ? ++index % world.points.size() : index;
+    mSelf.acc = Arrive(world.points[index], mSelf, mSelf.speed, 200);
     return nullptr;
 }
 
@@ -101,44 +103,7 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
     return nullptr;
 }
 
-bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
-{
-    for (const Circle& obstacle : obstacles)
-    {
-        if (CheckCollisionLineCircle(lineStart, lineEnd, obstacle))
-            return true;
-    }
-    return false;
-}
-
-Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles)
-{
-    auto avoid = [&](float angle, Vector2& acc) -> bool
-    {
-        if (IsCollision(rb.pos, rb.pos + Rotate(Normalize(rb.vel), angle * DEG2RAD) * probeLength, obstacles))
-        {
-            const Vector2 vf = Rotate(Normalize(rb.vel), rb.angularSpeed * dt * Sign(-angle)) * Length(rb.vel);
-            acc = Acceleration(rb.vel, vf, dt);
-            return true;
-        }
-        return false;
-    };
-
-    Vector2 acc{};
-    if (avoid(-15.0f, acc)) return acc;
-    if (avoid(15.0f, acc)) return acc;
-    if (avoid(-30.0f, acc)) return acc;
-    if (avoid(30.0f, acc)) return acc;
-    return acc;
-}
-
-Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius)
-{
-    index = Distance(rb.pos, points[index]) <= pointRadius ? ++index % points.size() : index;
-    return Arrive(points[index], rb, maxSpeed, slowRadius);
-}
-
-void Traverse(Node* node, const Entity& entity, World& world)
+void Traverse(Node* node, const Entity& entity, World& world, bool log)
 {
     using std::cout;
     using std::endl;
@@ -155,46 +120,47 @@ void Traverse(Node* node, const Entity& entity, World& world)
             node = node->Evaluate(entity, world);
             self.prev = type;
 
-#if LOG_ACTIONS
-            switch (type)
+            if (log)
             {
-            case PATROL:
-                cout << self.name + " patrolling" << endl;
-                break;
+                switch (type)
+                {
+                case PATROL:
+                    cout << self.name + " patrolling" << endl;
+                    break;
 
-            case FIND_VISIBILITY:
-                cout << self.name + " finding visibility to " + entity.name << endl;
-                break;
+                case FIND_VISIBILITY:
+                    cout << self.name + " finding visibility to " + entity.name << endl;
+                    break;
 
-            case FIND_COVER:
-                cout << self.name + " finding cover from " + entity.name << endl;
-                break;
+                case FIND_COVER:
+                    cout << self.name + " finding cover from " + entity.name << endl;
+                    break;
 
-            case SEEK:
-                cout << self.name + " seeking to " + entity.name << endl;
-                break;
+                case SEEK:
+                    cout << self.name + " seeking to " + entity.name << endl;
+                    break;
 
-            case FLEE:
-                cout << self.name + " fleeing from " + entity.name << endl;
-                break;
+                case FLEE:
+                    cout << self.name + " fleeing from " + entity.name << endl;
+                    break;
 
-            case ARRIVE:
-                cout << self.name + " arriving at " + entity.name << endl;
-                break;
+                case ARRIVE:
+                    cout << self.name + " arriving at " + entity.name << endl;
+                    break;
 
-            case CLOSE_ATTACK:
-                cout << self.name + " attacking " + entity.name << endl;
-                break;
+                case CLOSE_ATTACK:
+                    cout << self.name + " attacking " + entity.name << endl;
+                    break;
 
-            case RANGED_ATTACK:
-                cout << self.name + " attacking " + entity.name << endl;
-                break;
+                case RANGED_ATTACK:
+                    cout << self.name + " attacking " + entity.name << endl;
+                    break;
 
-            case WAIT:
-                cout << self.name + " waiting. . ." << endl;
-                break;
+                case WAIT:
+                    cout << self.name + " waiting. . ." << endl;
+                    break;
+                }
             }
-#endif
         }
         else
             node = node->Evaluate(entity, world);

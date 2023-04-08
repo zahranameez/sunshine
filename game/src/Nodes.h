@@ -4,10 +4,7 @@
 #include "Timer.h"
 
 class Node;
-void Traverse(Node* node, const Entity& entity, World& world);
-bool IsCollision(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles);
-Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles);
-Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius);
+void Traverse(Node* node, const Entity& entity, World& world, bool log = false);
 
 class Node
 {
@@ -18,7 +15,7 @@ public:
 
 protected:
     Enemy& mSelf;
-    friend void Traverse(Node* node, const Entity& entity, World& world);
+    friend void Traverse(Node* node, const Entity& entity, World& world, bool log);
 };
 
 class Condition : public Node
@@ -75,7 +72,6 @@ class PatrolAction : public Action
 public:
     PatrolAction(Enemy& self) : Action(self) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return PATROL; }
 };
 
@@ -84,7 +80,6 @@ class FindVisibilityAction : public Action
 public:
     FindVisibilityAction(Enemy& self, Action* fallback) : Action(self, fallback) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return FIND_VISIBILITY; }
 };
 
@@ -93,7 +88,6 @@ class FindCoverAction : public Action
 public:
     FindCoverAction(Enemy& self, Action* fallback) : Action(self, fallback) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return FIND_COVER; }
 };
 
@@ -106,7 +100,6 @@ public:
     }
 
     ActionType Type() final { return WAIT; }
-
     Node* Evaluate(const Entity& entity, World& world) final;
 
 private:
@@ -118,7 +111,6 @@ class SeekAction : public Action
 public:
     SeekAction(Enemy& self) : Action(self) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return SEEK; }
 };
 
@@ -127,7 +119,6 @@ class FleeAction : public Action
 public:
     FleeAction(Enemy& self) : Action(self) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return FLEE; }
 };
 
@@ -136,7 +127,6 @@ class ArriveAction : public Action
 public:
     ArriveAction(Enemy& self) : Action(self) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return ARRIVE; }
 };
 
@@ -145,6 +135,13 @@ class CloseAttackAction : public Action
 public:
     CloseAttackAction(Enemy& self) : Action(self) {}
     Node* Evaluate(const Entity& entity, World& world) final;
-
     ActionType Type() final { return CLOSE_ATTACK; }
+};
+
+class RangedAttackAction : public Action
+{
+public:
+    RangedAttackAction(Enemy& self) : Action(self) {}
+    Node* Evaluate(const Entity& entity, World& world) final;
+    ActionType Type() final { return RANGED_ATTACK; }
 };

@@ -8,6 +8,35 @@
 
 using namespace std;
 
+Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles)
+{
+    // Test obstacles against probe
+    auto obstacleDetected = [&](float angle) -> bool
+    {
+        for (const Circle& obstacle : obstacles)
+        {
+            Vector2 probeEnd = rb.pos + Rotate(Normalize(rb.vel), angle * DEG2RAD) * probeLength;
+            if (CheckCollisionLineCircle(rb.pos, probeEnd, obstacle))
+                return true;
+        }
+        return false;
+    };
+
+    // Solve for acceleration that will change linear velocity to point angular speed radians away from oncoming obstacle
+    auto avoid = [&](float angle) -> Vector2
+    {
+        const Vector2 vf = Rotate(Normalize(rb.vel), rb.angularSpeed * dt * Sign(-angle)) * Length(rb.vel);
+        return Acceleration(rb.vel, vf, dt);
+    };
+
+    // Return avoidance acceleration, otherwise return no acceleration since there's no oncoming obstacles
+    if (obstacleDetected(-15.0f)) return avoid(-15.0f);
+    if (obstacleDetected(-30.0f)) return avoid(-30.0f);
+    if (obstacleDetected( 15.0f)) return avoid( 15.0f);
+    if (obstacleDetected( 30.0f)) return avoid( 30.0f);
+    return {};
+}
+
 bool ResolveCollisions(Vector2& position, float radius, const Obstacles& obstacles)
 {
     for (const Circle& obstacle : obstacles)
@@ -67,6 +96,8 @@ int main(void)
     ArriveAction cceArrive(cce);
     CloseAttackAction cceAttack(cce);
 
+    PatrolAction rcePatrol(rce);
+
     Node* cceRoot = &cceIsPlayerDetected;
     cceIsPlayerDetected.no = &ccePatrol;
     cceIsPlayerDetected.yes = &cceIsPlayerVisible;
@@ -105,17 +136,17 @@ int main(void)
         player.pos = GetMousePosition();
         const Vector2 playerEnd = player.pos + player.dir * 500.0f;
 
-        Traverse(cceRoot, player, world);
+        Traverse(cceRoot, player, world, true);
         cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
         Integrate(cce, dt);
 
-        rce.acc = Patrol(world.points, rce, rce.point, rce.speed, 200.0f, 100.0f);
+        Traverse(&rcePatrol, player, world);
         rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
         Integrate(rce, dt);
 
         bool playerCollision = ResolveCollisions(player.pos, player.radius, world.obstacles);
-        bool cceCollision = ResolveCollisions(cce.pos, cce.radius, world.obstacles);
-        bool rceCollision = ResolveCollisions(rce.pos, rce.radius, world.obstacles);
+        bool cceCollision = false;//ResolveCollisions(cce.pos, cce.radius, world.obstacles);
+        bool rceCollision = false;//ResolveCollisions(rce.pos, rce.radius, world.obstacles);
 
         vector<Vector2> intersections;
         for (const Circle& obstacle : world.obstacles)
