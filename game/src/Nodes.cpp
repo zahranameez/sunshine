@@ -163,6 +163,7 @@ Node* ArriveAction::Evaluate(const Entity& entity, World& world)
 
 Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
 {
+    // Shoot towards player instead of in mSelf.dir because there's no FoV check
     if (mTimer.Expired())
     {
         mTimer.Reset();
@@ -172,23 +173,22 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
         Projectile right;
         Projectile left;
 
-        // Shoot towards player instead of in mSelf.dir because there's no FoV check
+        left.radius = right.radius = center.radius = 10.0f;
+        left.damage = right.damage = center.damage = 5.0f;
+        
         center.dir = Normalize(entity.pos - mSelf.pos);
         right.dir = Rotate(center.dir, 30.0f * DEG2RAD);
         left.dir = Rotate(center.dir, -30.0f * DEG2RAD);
 
-        center.pos = mSelf.pos + center.dir * mSelf.radius;
-        right.pos = mSelf.pos + right.dir * mSelf.radius;
-        left.pos = mSelf.pos + left.dir * mSelf.radius;
+        const float offset = mSelf.radius + center.radius;
+        center.pos = mSelf.pos + center.dir * offset;
+        right.pos = mSelf.pos + right.dir * offset;
+        left.pos = mSelf.pos + left.dir * offset;
 
         const float speed = 500.0f;
         left.vel = left.dir * speed;
         right.vel = right.dir * speed;
         center.vel = center.dir * speed;
-
-        left.radius = right.radius = center.radius = 10.0f;
-        left.damage = right.damage = center.damage = 50.0f;
-        //left.acc = right.acc = center.acc = center.dir * 1000.0f;
 
         world.projectiles.push_back(std::move(left));
         world.projectiles.push_back(std::move(right));
@@ -202,5 +202,24 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
 
 Node* RangedAttackAction::Evaluate(const Entity& entity, World& world)
 {
+    // Shoot towards player instead of in mSelf.dir because there's no FoV check
+    if (mTimer.Expired())
+    {
+        mTimer.Reset();
+        PlaySound(mSound);
+
+        Projectile projectile;
+        projectile.dir = Normalize(entity.pos - mSelf.pos);
+        projectile.radius = 50.0f;
+        projectile.pos = mSelf.pos + projectile.dir * (mSelf.radius + projectile.radius);
+        projectile.vel = projectile.dir * 100.0f;
+        projectile.acc = projectile.dir * 1000.0f;
+        projectile.damage = 100.0f;
+        world.projectiles.push_back(std::move(projectile));
+    }
+
+    mTimer.Tick(GetFrameTime());
+    mSelf.vel = Normalize(mSelf.vel);
+    mSelf.acc = {};
     return nullptr;
 }

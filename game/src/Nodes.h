@@ -150,7 +150,16 @@ private:
 class RangedAttackAction : public Action
 {
 public:
-    RangedAttackAction(Enemy& self) : Action(self) {}
+    RangedAttackAction(Enemy& self, const Sound& sound) : Action(self), mSound(sound)
+    {
+        mTimer.duration = 2.5f;
+        mTimer.elapsed = mTimer.duration;
+    }
+
     Node* Evaluate(const Entity& entity, World& world) final;
     ActionType Type() final { return RANGED_ATTACK; }
+
+private:
+    Timer mTimer;
+    const Sound& mSound;
 };

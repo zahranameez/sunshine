@@ -77,6 +77,9 @@ int main(void)
     rlImGuiSetup(true);
     SetTargetFPS(60);
 
+    Sound shotgunSound = LoadSound("../game/assets/audio/shotgun.wav");
+    Sound sniperSound = LoadSound("../game/assets/audio/sniper.wav");
+
     World world;
     world.obstacles = LoadObstacles();
     world.points = LoadPoints();
@@ -104,27 +107,25 @@ int main(void)
     rce.dir = { 1.0f, 0.0f };
     rce.angularSpeed = DEG2RAD * 100.0f;
     rce.point = 0;
-    rce.speed = 300.0f;
+    rce.speed = 250.0f;
     rce.radius = 50.0f;
     rce.detectionRadius = 600.0f;
     rce.probeLength = 100.0f;
     rce.combatRadius = 400.0f;
     rce.name = "Ranged-combat enemy";
 
-    Sound shotgunSound = LoadSound("../game/assets/audio/shotgun.wav");
-    Sound sniperSound = LoadSound("../game/assets/audio/sniper.wav");
-
+    // CCE conditions
     DetectedCondition cceIsPlayerDetected(cce);
     VisibleCondition cceIsPlayerVisible(cce);
     CloseCombatCondition cceIsPlayerCombat(cce);
 
+    // CCE actions
     PatrolAction ccePatrol(cce);
     FindVisibilityAction cceFindVisibility(cce, &ccePatrol);
     ArriveAction cceArrive(cce);
     CloseAttackAction cceAttack(cce, shotgunSound);
 
-    PatrolAction rcePatrol(rce);
-
+    // CCE tree
     Node* cceRoot = &cceIsPlayerDetected;
     cceIsPlayerDetected.no = &ccePatrol;
     cceIsPlayerDetected.yes = &cceIsPlayerVisible;
@@ -132,6 +133,29 @@ int main(void)
     cceIsPlayerVisible.yes = &cceIsPlayerCombat;
     cceIsPlayerCombat.no = &cceArrive;
     cceIsPlayerCombat.yes = &cceAttack;
+
+    // RCE decisions
+    DetectedCondition rceIsPlayerDetected(rce);
+    VisibleCondition rceIsPlayerVisible(rce);
+    RangedCombatCondition rceIsPlayerCombat(rce);
+
+    // RCE actions
+    PatrolAction rcePatrol(rce);
+    FindVisibilityAction rceFindVisibility(rce, &rcePatrol);
+    FleeAction rceFlee(rce);
+    RangedAttackAction rceAttack (rce, sniperSound);
+
+    // RCE tree
+    Node* rceRoot = &rceIsPlayerDetected;
+    rceIsPlayerDetected.no = &rcePatrol;
+    rceIsPlayerDetected.yes = &rceIsPlayerVisible;
+    rceIsPlayerVisible.no = &rceFindVisibility;
+    rceIsPlayerVisible.yes = &rceIsPlayerCombat;
+    rceIsPlayerCombat.no = &rceFlee;
+    rceIsPlayerCombat.yes = &rceAttack;
+
+    // Turn off rapid-fire shotgun while I make RCE xD
+    //cceRoot = &ccePatrol;
 
     const Color background = RAYWHITE;
     const Color playerColor = { 0, 228, 48, 128 };          // GREEN
@@ -164,7 +188,7 @@ int main(void)
         //cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
         Integrate(cce, dt);
 
-        Traverse(&rcePatrol, player, world);
+        Traverse(rceRoot, player, world);
         //rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
         Integrate(rce, dt);
 
