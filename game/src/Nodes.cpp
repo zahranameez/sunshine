@@ -4,6 +4,70 @@
 #include <cassert>
 #include <iostream>
 
+void Traverse(Node* node, const Entity& entity, World& world, bool log)
+{
+    using std::cout;
+    using std::endl;
+
+    while (node != nullptr)
+    {
+        if (node->IsAction())
+        {
+            Action* action = dynamic_cast<Action*>(node);
+            ActionType type = action->Type();
+            Enemy& self = action->mSelf;
+
+            self.curr = type;
+            node = node->Evaluate(entity, world);
+            self.prev = type;
+
+            if (log)
+            {
+                switch (type)
+                {
+                case PATROL:
+                    cout << self.name + " patrolling" << endl;
+                    break;
+
+                case FIND_VISIBILITY:
+                    cout << self.name + " finding visibility to " + entity.name << endl;
+                    break;
+
+                case FIND_COVER:
+                    cout << self.name + " finding cover from " + entity.name << endl;
+                    break;
+
+                case SEEK:
+                    cout << self.name + " seeking to " + entity.name << endl;
+                    break;
+
+                case FLEE:
+                    cout << self.name + " fleeing from " + entity.name << endl;
+                    break;
+
+                case ARRIVE:
+                    cout << self.name + " arriving at " + entity.name << endl;
+                    break;
+
+                case CLOSE_ATTACK:
+                    cout << self.name + " attacking " + entity.name << endl;
+                    break;
+
+                case RANGED_ATTACK:
+                    cout << self.name + " attacking " + entity.name << endl;
+                    break;
+
+                case WAIT:
+                    cout << self.name + " waiting. . ." << endl;
+                    break;
+                }
+            }
+        }
+        else
+            node = node->Evaluate(entity, world);
+    }
+}
+
 Node* DetectedCondition::Evaluate(const Entity& entity, World& world)
 {
     return DistanceSqr(mSelf.pos, entity.pos) <= mSelf.detectionRadius * mSelf.detectionRadius ? yes : no;
@@ -99,70 +163,42 @@ Node* ArriveAction::Evaluate(const Entity& entity, World& world)
 
 Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
 {
+    if (mTimer.Expired())
+    {
+        mTimer.Reset();
+
+        Projectile center;
+        Projectile right;
+        Projectile left;
+
+        // Shoot towards player instead of in mSelf.dir because there's no FoV check
+        center.dir = Normalize(entity.pos - mSelf.pos);
+        right.dir = Rotate(center.dir, 30.0f * DEG2RAD);
+        left.dir = Rotate(center.dir, -30.0f * DEG2RAD);
+
+        center.pos = mSelf.pos + center.dir * mSelf.radius;
+        right.pos = mSelf.pos + right.dir * mSelf.radius;
+        left.pos = mSelf.pos + left.dir * mSelf.radius;
+
+        const float speed = 250.0f;
+        left.vel = left.dir * speed;
+        right.vel = right.dir * speed;
+        center.vel = center.dir * speed;
+
+        left.radius = right.radius = center.radius = 10.0f;
+        left.damage = right.damage = center.damage = 50.0f;
+
+        world.projectiles.push_back(std::move(left));
+        world.projectiles.push_back(std::move(right));
+        world.projectiles.push_back(std::move(center));
+    }
+
+    mTimer.Tick(GetFrameTime());
     mSelf.acc = Arrive(entity.pos, mSelf, mSelf.speed, 100.0f, 5.0f);
     return nullptr;
 }
 
-void Traverse(Node* node, const Entity& entity, World& world, bool log)
+Node* RangedAttackAction::Evaluate(const Entity& entity, World& world)
 {
-    using std::cout;
-    using std::endl;
-
-    while (node != nullptr)
-    {
-        if (node->IsAction())
-        {
-            Action* action = dynamic_cast<Action*>(node);
-            ActionType type = action->Type();
-            Enemy& self = action->mSelf;
-
-            self.curr = type;
-            node = node->Evaluate(entity, world);
-            self.prev = type;
-
-            if (log)
-            {
-                switch (type)
-                {
-                case PATROL:
-                    cout << self.name + " patrolling" << endl;
-                    break;
-
-                case FIND_VISIBILITY:
-                    cout << self.name + " finding visibility to " + entity.name << endl;
-                    break;
-
-                case FIND_COVER:
-                    cout << self.name + " finding cover from " + entity.name << endl;
-                    break;
-
-                case SEEK:
-                    cout << self.name + " seeking to " + entity.name << endl;
-                    break;
-
-                case FLEE:
-                    cout << self.name + " fleeing from " + entity.name << endl;
-                    break;
-
-                case ARRIVE:
-                    cout << self.name + " arriving at " + entity.name << endl;
-                    break;
-
-                case CLOSE_ATTACK:
-                    cout << self.name + " attacking " + entity.name << endl;
-                    break;
-
-                case RANGED_ATTACK:
-                    cout << self.name + " attacking " + entity.name << endl;
-                    break;
-
-                case WAIT:
-                    cout << self.name + " waiting. . ." << endl;
-                    break;
-                }
-            }
-        }
-        else
-            node = node->Evaluate(entity, world);
-    }
+    return nullptr;
 }

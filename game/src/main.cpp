@@ -37,18 +37,36 @@ Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles&
     return {};
 }
 
-bool ResolveCollisions(Vector2& position, float radius, const Obstacles& obstacles)
+bool ResolveCollisions(Entity& entity, const Obstacles& obstacles)
 {
     for (const Circle& obstacle : obstacles)
     {
         Vector2 mtv;
-        if (CheckCollisionCircles(obstacle, { position, radius }, mtv))
+        if (CheckCollisionCircles(obstacle, entity.Collider(), mtv))
         {
-            position = position + mtv;
+            entity.pos = entity.pos + mtv;
             return true;
         }
     }
     return false;
+}
+
+void RenderHealthBar(const Entity& entity, Color background = DARKGRAY, Color foreground = RED)
+{
+    const float healthBarWidth = 150.0f;
+    const float healthBarHeight = 20.0f;
+    const float x = entity.pos.x - healthBarWidth * 0.5f;
+    const float y = entity.pos.y - (entity.radius + 30.0f);
+    DrawRectangle(x, y, healthBarWidth, healthBarHeight, background);
+    DrawRectangle(x, y, healthBarWidth * entity.HealthPercent(), healthBarHeight, foreground);
+}
+
+void CenterText(const char* text, Rectangle rec, int fontSize, Color color)
+{
+    DrawText(text,
+        rec.x + rec.width * 0.5f - MeasureText(text, fontSize) * 0.5f,
+        rec.y + rec.height * 0.5f - fontSize * 0.5f,
+        fontSize, color);
 }
 
 int main(void)
@@ -66,13 +84,13 @@ int main(void)
     Enemy cce;
     cce.pos = { 1000.0f, 250.0f };
     cce.dir = { -1.0f, 0.0f };
-    cce.angularSpeed = DEG2RAD * 100.0f;
+    cce.angularSpeed = DEG2RAD * 200.0f;
     cce.point = 0;
     cce.speed = 300.0f;
     cce.radius = 50.0f;
     cce.detectionRadius = 300.0f;
     cce.probeLength = 100.0f;
-    cce.combatRadius = 100.0f;
+    cce.combatRadius = 300.0f;
     cce.name = "Close-combat enemy";
 
     Enemy rce;
@@ -82,7 +100,7 @@ int main(void)
     rce.point = 0;
     rce.speed = 300.0f;
     rce.radius = 50.0f;
-    rce.detectionRadius = 300.0f;
+    rce.detectionRadius = 600.0f;
     rce.probeLength = 100.0f;
     rce.combatRadius = 400.0f;
     rce.name = "Ranged-combat enemy";
@@ -114,8 +132,8 @@ int main(void)
     const Color cceVisibleColor = { 102, 191, 255, 128 };   // SKYBLUE
 
     const Color rceColor = { 135, 60, 190, 128 };           // VIOLET
-    const Color rceOverlapColor = { 112, 31, 126, 128 };    // DARKPURPLE
-    const Color rceVisibleColor = { 200, 122, 255, 128 };   // PURPLE
+    const Color rceOverlapColor = { 200, 122, 255, 128 };   // PURPLE
+    const Color rceVisibleColor = { 255, 0, 255, 128 };     // MAGENTA
 
     bool useDebug = true;
     bool useGUI = false;
@@ -136,7 +154,7 @@ int main(void)
         player.pos = GetMousePosition();
         const Vector2 playerEnd = player.pos + player.dir * 500.0f;
 
-        Traverse(cceRoot, player, world, true);
+        Traverse(cceRoot, player, world);
         cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
         Integrate(cce, dt);
 
@@ -144,9 +162,33 @@ int main(void)
         rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
         Integrate(rce, dt);
 
-        bool playerCollision = ResolveCollisions(player.pos, player.radius, world.obstacles);
-        bool cceCollision = false;//ResolveCollisions(cce.pos, cce.radius, world.obstacles);
-        bool rceCollision = false;//ResolveCollisions(rce.pos, rce.radius, world.obstacles);
+        for (Projectile& projectile : world.projectiles)
+            Integrate(projectile, dt);
+
+        world.projectiles.erase(
+            std::remove_if(world.projectiles.begin(), world.projectiles.end(),
+                [&player, &world](const Projectile& projectile)
+                {
+                    if (CheckCollisionCircles(player.Collider(), projectile.Collider()))
+                    {
+                        player.health -= projectile.damage;
+                        return true;
+                    }
+
+                    for (const Circle& obstacle : world.obstacles)
+                    {
+                        if (CheckCollisionCircles(obstacle, projectile.Collider()))
+                            return true;
+                    }
+
+                    
+                    return !CheckCollisionCircleRec(projectile.pos, projectile.radius, SCREEN_REC);
+            }),
+        world.projectiles.end());
+
+        bool playerCollision = ResolveCollisions(player, world.obstacles);
+        bool cceCollision = ResolveCollisions(cce, world.obstacles);
+        bool rceCollision = ResolveCollisions(rce, world.obstacles);
 
         vector<Vector2> intersections;
         for (const Circle& obstacle : world.obstacles)
@@ -160,6 +202,26 @@ int main(void)
         BeginDrawing();
         ClearBackground(background);
 
+        // Cheap implementation of game screens (note that the update code is still running)
+        auto endScreen = [](const char* message, Color background, Color foreground)
+        {
+            DrawRectangleRec(SCREEN_REC, background);
+            CenterText(message, SCREEN_REC, 30, foreground);
+            EndDrawing();
+        };
+
+        if (player.health <= 0.0f)
+        {
+            endScreen("You lost :(", RED, BLACK);
+            continue;
+        }
+
+        if (cce.health <= 0.0f && rce.health <= 0.0f)
+        {
+            endScreen("You won :)", GREEN, WHITE);
+            continue;
+        }
+
         // Render debug
         if (useDebug)
         {
@@ -171,13 +233,13 @@ int main(void)
             vector<size_t> rceVisibleTiles =
                 VisibleTiles(player.Collider(), rce.detectionRadius, world.obstacles, OverlapTiles(rceOverlapRec));
                 
-            DrawRectangleRec(rceOverlapRec, rceOverlapColor);
-            for (size_t i : cceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
-
-            DrawRectangleRec(cceOverlapRec, cceOverlapColor);
-            for (size_t i : rceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
+            //DrawRectangleRec(cceOverlapRec, cceOverlapColor);
+            //for (size_t i : cceVisibleTiles)
+            //    DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
+            //
+            //DrawRectangleRec(rceOverlapRec, rceOverlapColor);
+            //for (size_t i : rceVisibleTiles)
+            //    DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
         }
 
         // Render entities
@@ -187,6 +249,13 @@ int main(void)
         DrawLineEx(cce.pos, cce.pos + cce.dir * cce.detectionRadius, 10.0f, cceColor);
         DrawLineEx(rce.pos, rce.pos + rce.dir * rce.detectionRadius, 10.0f, rceColor);
         DrawLineEx(player.pos, playerEnd, 10.0f, playerIntersection ? RED : playerColor);
+        for (Entity& projectile : world.projectiles)
+            DrawCircleV(projectile.pos, projectile.radius, RED);
+
+        // Health bars
+        RenderHealthBar(cce);
+        RenderHealthBar(rce);
+        RenderHealthBar(player);
 
         // Avoidance lines
         DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel), -30.0f * DEG2RAD) * cce.probeLength, 5.0f, cceColor);

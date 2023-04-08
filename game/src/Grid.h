@@ -9,6 +9,8 @@ constexpr int SCREEN_HEIGHT = 720;
 constexpr int TILE_WIDTH = SCREEN_WIDTH / GRID_LENGTH;
 constexpr int TILE_HEIGHT = SCREEN_HEIGHT / GRID_LENGTH;
 
+constexpr Rectangle SCREEN_REC{ 0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT };
+
 inline size_t ScreenToGrid(Vector2 point)
 {
     size_t col = point.x / TILE_WIDTH;
@@ -25,15 +27,15 @@ inline Vector2 GridToScreen(size_t index)
 
 inline std::vector<size_t> OverlapTiles(Rectangle rectangle)
 {
-    if (rectangle.x < 0.0f) rectangle.x = 0.0f;
-    if (rectangle.y < 0.0f) rectangle.y = 0.0f;
-    if (rectangle.x + rectangle.width > SCREEN_WIDTH) rectangle.x = SCREEN_WIDTH - rectangle.width;
-    if (rectangle.y + rectangle.height > SCREEN_HEIGHT) rectangle.y = SCREEN_HEIGHT - rectangle.height;
+    const float xMin = std::min(std::max(rectangle.x, 0.0f), (float)SCREEN_WIDTH);
+    const float yMin = std::min(std::max(rectangle.y, 0.0f), (float)SCREEN_HEIGHT);
+    const float xMax = std::min(std::max(rectangle.x + rectangle.width, 0.0f), (float)SCREEN_WIDTH);
+    const float yMax = std::min(std::max(rectangle.y + rectangle.height, 0.0f), (float)SCREEN_HEIGHT);
 
-    const size_t colMin = rectangle.x / TILE_WIDTH;
-    const size_t rowMin = rectangle.y / TILE_HEIGHT;
-    const size_t colMax = (rectangle.x + rectangle.width) / TILE_WIDTH;
-    const size_t rowMax = (rectangle.y + rectangle.height) / TILE_HEIGHT;
+    const size_t colMin = xMin / TILE_WIDTH;
+    const size_t rowMin = yMin / TILE_HEIGHT;
+    const size_t colMax = xMax / TILE_WIDTH;
+    const size_t rowMax = yMax / TILE_HEIGHT;
 
     std::vector<size_t> indices;
     indices.reserve((colMax - colMin) * (rowMax - rowMin));

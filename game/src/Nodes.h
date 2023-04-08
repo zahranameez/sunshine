@@ -133,9 +133,17 @@ public:
 class CloseAttackAction : public Action
 {
 public:
-    CloseAttackAction(Enemy& self) : Action(self) {}
+    CloseAttackAction(Enemy& self) : Action(self)
+    {
+        mTimer.duration = 2.5f;
+        mTimer.elapsed = mTimer.duration;
+    }
+
     Node* Evaluate(const Entity& entity, World& world) final;
     ActionType Type() final { return CLOSE_ATTACK; }
+
+private:
+    Timer mTimer;
 };
 
 class RangedAttackAction : public Action
