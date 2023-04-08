@@ -52,13 +52,27 @@ inline std::vector<size_t> OverlapTiles(Rectangle rectangle)
 inline std::vector<size_t> VisibleTiles(Circle target, float detectionRadius,
     const Obstacles& obstacles, const std::vector<size_t>& tiles)
 {
-    std::vector<size_t> visibilityTiles;
-    visibilityTiles.reserve(tiles.size());
+    std::vector<size_t> visibileTiles;
+    visibileTiles.reserve(tiles.size());
     for (size_t i : tiles)
     {
         Vector2 tileCenter = GridToScreen(i) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
         Vector2 tileEnd = tileCenter + Normalize(target.position - tileCenter) * detectionRadius;
-        if (IsCircleVisible(tileCenter, tileEnd, target, obstacles)) visibilityTiles.push_back(i);
+        if (IsCircleVisible(tileCenter, tileEnd, target, obstacles)) visibileTiles.push_back(i);
     }
-    return visibilityTiles;
+    return visibileTiles;
+}
+
+inline std::vector<size_t> CoverTiles(Circle target, float detectionRadius,
+    const Obstacles& obstacles, const std::vector<size_t>& tiles)
+{
+    std::vector<size_t> coverTiles;
+    coverTiles.reserve(tiles.size());
+    for (size_t i : tiles)
+    {
+        Vector2 tileCenter = GridToScreen(i) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+        Vector2 tileEnd = tileCenter + Normalize(target.position - tileCenter) * detectionRadius;
+        if (!IsCircleVisible(tileCenter, tileEnd, target, obstacles)) coverTiles.push_back(i);
+    }
+    return coverTiles;
 }

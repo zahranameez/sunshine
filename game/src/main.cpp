@@ -79,6 +79,7 @@ int main(void)
 
     Sound shotgunSound = LoadSound("../game/assets/audio/shotgun.wav");
     Sound sniperSound = LoadSound("../game/assets/audio/sniper.wav");
+    SetSoundVolume(shotgunSound, 0.25f);
 
     World world;
     world.obstacles = LoadObstacles();
@@ -97,7 +98,7 @@ int main(void)
     cce.point = 0;
     cce.speed = 500.0f;
     cce.radius = 50.0f;
-    cce.detectionRadius = 300.0f;
+    cce.detectionRadius = 400.0f;
     cce.probeLength = 100.0f;
     cce.combatRadius = 300.0f;
     cce.name = "Close-combat enemy";
@@ -123,7 +124,7 @@ int main(void)
     PatrolAction ccePatrol(cce);
     FindVisibilityAction cceFindVisibility(cce, &ccePatrol);
     ArriveAction cceArrive(cce);
-    CloseAttackAction cceAttack(cce, shotgunSound);
+    CloseAttackAction cceAttack(cce, &cceArrive, &shotgunSound);
 
     // CCE tree
     Node* cceRoot = &cceIsPlayerDetected;
@@ -143,7 +144,12 @@ int main(void)
     PatrolAction rcePatrol(rce);
     FindVisibilityAction rceFindVisibility(rce, &rcePatrol);
     FleeAction rceFlee(rce);
-    RangedAttackAction rceAttack (rce, sniperSound);
+    RangedAttackAction rceAttack (rce, &rcePatrol, &sniperSound);
+
+    // Need something like an interrupt if I'm to implement something like this elegantly...
+    // Interrupt would have to tick previous state timer while not relinquishing control until current condition is met.
+    //FindCoverAction rceFindCover(rce, &rcePatrol);
+    //RangedAttackAction rceAttack (rce, &rceFindCover, &sniperSound);
 
     // RCE tree
     Node* rceRoot = &rceIsPlayerDetected;
@@ -153,9 +159,6 @@ int main(void)
     rceIsPlayerVisible.yes = &rceIsPlayerCombat;
     rceIsPlayerCombat.no = &rceFlee;
     rceIsPlayerCombat.yes = &rceAttack;
-
-    // Turn off rapid-fire shotgun while I make RCE xD
-    //cceRoot = &ccePatrol;
 
     const Color background = RAYWHITE;
     const Color playerColor = { 0, 228, 48, 128 };          // GREEN
@@ -185,11 +188,11 @@ int main(void)
         const Vector2 playerEnd = player.pos + player.dir * 500.0f;
 
         Traverse(cceRoot, player, world);
-        //cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
+        cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
         Integrate(cce, dt);
 
         Traverse(rceRoot, player, world);
-        //rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
+        rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
         Integrate(rce, dt);
 
         for (Projectile& projectile : world.projectiles)
@@ -200,7 +203,10 @@ int main(void)
                 [&player, &world](const Projectile& projectile) -> bool
                 {
                     if (CheckCollisionCircles(player.Collider(), projectile.Collider()))
+                    {
+                        player.health -= projectile.damage;
                         return true;
+                    }
 
                     for (const Circle& obstacle : world.obstacles)
                     {
@@ -260,13 +266,13 @@ int main(void)
             vector<size_t> rceVisibleTiles =
                 VisibleTiles(player.Collider(), rce.detectionRadius, world.obstacles, OverlapTiles(rceOverlapRec));
                 
-            //DrawRectangleRec(cceOverlapRec, cceOverlapColor);
-            //for (size_t i : cceVisibleTiles)
-            //    DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
-            //
-            //DrawRectangleRec(rceOverlapRec, rceOverlapColor);
-            //for (size_t i : rceVisibleTiles)
-            //    DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
+            DrawRectangleRec(cceOverlapRec, cceOverlapColor);
+            for (size_t i : cceVisibleTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
+            
+            DrawRectangleRec(rceOverlapRec, rceOverlapColor);
+            for (size_t i : rceVisibleTiles)
+                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
         }
 
         // Render entities

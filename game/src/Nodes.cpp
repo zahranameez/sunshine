@@ -1,7 +1,6 @@
 #include "Nodes.h"
 #include "Collision.h"
 #include "Grid.h"
-#include <cassert>
 #include <iostream>
 
 void Traverse(Node* node, const Entity& entity, World& world, bool log)
@@ -75,9 +74,16 @@ Node* DetectedCondition::Evaluate(const Entity& entity, World& world)
 
 Node* VisibleCondition::Evaluate(const Entity& entity, World& world)
 {
-    // Doesn't take direction/FoV into account. An omniscient AI leads to better gameplay in this case!
+    // Visible if no line-circle intersections between self and entity
     Vector2 detectionEnd = mSelf.pos + Normalize(entity.pos - mSelf.pos) * mSelf.detectionRadius;
     return IsCircleVisible(mSelf.pos, detectionEnd, entity.Collider(), world.obstacles) ? yes : no;
+}
+
+Node* CoverCondition::Evaluate(const Entity& entity, World& world)
+{
+    // Cover if line-circle intersections between self and entity
+    Vector2 detectionEnd = mSelf.pos + Normalize(entity.pos - mSelf.pos) * mSelf.detectionRadius;
+    return !IsCircleVisible(mSelf.pos, detectionEnd, entity.Collider(), world.obstacles) ? yes : no;
 }
 
 Node* CloseCombatCondition::Evaluate(const Entity& entity, World& world)
@@ -95,16 +101,17 @@ Node* RangedCombatCondition::Evaluate(const Entity& entity, World& world)
 Node* PatrolAction::Evaluate(const Entity& entity, World& world)
 {
     // Find nearest waypoint
-    if (mSelf.prev != PATROL)
-    {
-        size_t min = 0;
-        for (size_t i = 1; i < world.points.size(); i++)
-        {
-            if (DistanceSqr(mSelf.pos, world.points[i]) < DistanceSqr(mSelf.pos, world.points[min]))
-                min = i;
-        }
-        mSelf.point = min;
-    }
+    //if (mSelf.prev != PATROL)
+    //{
+    //    size_t min = 0;
+    //    for (size_t i = 1; i < world.points.size(); i++)
+    //    {
+    //        if (DistanceSqr(mSelf.pos, world.points[i]) < DistanceSqr(mSelf.pos, world.points[min]))
+    //            min = i;
+    //    }
+    //    mSelf.point = min;
+    //}
+    // Nice idea, but causes Patrol to fail if used as a fallback action
 
     size_t& index = mSelf.point;
     index = Distance(mSelf.pos, world.points[index]) <= 100.0f ? ++index % world.points.size() : index;
@@ -129,18 +136,27 @@ Node* FindVisibilityAction::Evaluate(const Entity& entity, World& world)
         return nullptr;
     }
 
-    assert(mFallback != nullptr);
-    return mFallback->Evaluate(entity, world);
+    return mFallback;
 }
 
 Node* FindCoverAction::Evaluate(const Entity& entity, World& world)
 {
-    return nullptr;
-}
+    // Seek nearest enemy-visible tile
+    std::vector<size_t> coverTiles = CoverTiles(entity.Collider(), mSelf.detectionRadius,
+        world.obstacles, OverlapTiles(From({ mSelf.pos, mSelf.detectionRadius })));
 
-Node* WaitAction::Evaluate(const Entity& entity, World& world)
-{
-    return nullptr;
+    // Ensure points aren't too close to obstacles
+    Points coverPoints(coverTiles.size());
+    for (size_t i = 0; i < coverPoints.size(); i++)
+        coverPoints[i] = GridToScreen(coverTiles[i]) + Vector2{ TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f };
+
+    if (!coverPoints.empty())
+    {
+        mSelf.acc = Seek(NearestPoint(mSelf.pos, coverPoints), mSelf, mSelf.speed);
+        return nullptr;
+    }
+
+    return mFallback;
 }
 
 Node* SeekAction::Evaluate(const Entity& entity, World& world)
@@ -167,7 +183,8 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
     if (mTimer.Expired())
     {
         mTimer.Reset();
-        PlaySound(mSound);
+        if (mSound != nullptr)
+            PlaySound(*mSound);
 
         Projectile center;
         Projectile right;
@@ -193,11 +210,12 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
         world.projectiles.push_back(std::move(left));
         world.projectiles.push_back(std::move(right));
         world.projectiles.push_back(std::move(center));
+        return nullptr;
     }
 
+    // Arrive at player if attack on cooldown
     mTimer.Tick(GetFrameTime());
-    mSelf.acc = Arrive(entity.pos, mSelf, mSelf.speed, 100.0f, 5.0f);
-    return nullptr;
+    return mFallback;
 }
 
 Node* RangedAttackAction::Evaluate(const Entity& entity, World& world)
@@ -206,7 +224,8 @@ Node* RangedAttackAction::Evaluate(const Entity& entity, World& world)
     if (mTimer.Expired())
     {
         mTimer.Reset();
-        PlaySound(mSound);
+        if (mSound != nullptr)
+            PlaySound(*mSound);
 
         Projectile projectile;
         projectile.dir = Normalize(entity.pos - mSelf.pos);
@@ -216,10 +235,13 @@ Node* RangedAttackAction::Evaluate(const Entity& entity, World& world)
         projectile.acc = projectile.dir * 1000.0f;
         projectile.damage = 100.0f;
         world.projectiles.push_back(std::move(projectile));
+
+        mSelf.vel = Normalize(mSelf.vel);
+        mSelf.acc = {};
+        return nullptr;
     }
 
-    mTimer.Tick(GetFrameTime());
-    mSelf.vel = Normalize(mSelf.vel);
-    mSelf.acc = {};
-    return nullptr;
+    // Patrol if attack on cooldown (Flee shoots off screen and Find Cover jitters between visible & invisible).
+    mTimer.Tick(GetFrameTime());    
+    return mFallback;
 }

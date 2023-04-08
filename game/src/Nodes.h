@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "World.h"
 #include "Timer.h"
+#include <cassert>
 
 class Node;
 void Traverse(Node* node, const Entity& entity, World& world, bool log = false);
@@ -36,7 +37,7 @@ public:
     virtual ActionType Type() = 0;
 
 protected:
-    Action* mFallback = nullptr;
+    Action* mFallback;
 };
 
 class DetectedCondition : public Condition
@@ -50,6 +51,13 @@ class VisibleCondition : public Condition
 {
 public:
     VisibleCondition(Enemy& self) : Condition(self) {}
+    Node* Evaluate(const Entity& entity, World& world) final;
+};
+
+class CoverCondition : public Condition
+{
+public:
+    CoverCondition(Enemy& self) : Condition(self) {}
     Node* Evaluate(const Entity& entity, World& world) final;
 };
 
@@ -78,7 +86,7 @@ public:
 class FindVisibilityAction : public Action
 {
 public:
-    FindVisibilityAction(Enemy& self, Action* fallback) : Action(self, fallback) {}
+    FindVisibilityAction(Enemy& self, Action* fallback) : Action(self, fallback) { assert(mFallback != nullptr); }
     Node* Evaluate(const Entity& entity, World& world) final;
     ActionType Type() final { return FIND_VISIBILITY; }
 };
@@ -86,24 +94,9 @@ public:
 class FindCoverAction : public Action
 {
 public:
-    FindCoverAction(Enemy& self, Action* fallback) : Action(self, fallback) {}
+    FindCoverAction(Enemy& self, Action* fallback) : Action(self, fallback) { assert(mFallback != nullptr); }
     Node* Evaluate(const Entity& entity, World& world) final;
     ActionType Type() final { return FIND_COVER; }
-};
-
-class WaitAction : public Action
-{
-public:
-    WaitAction(Enemy& self, Action* fallback, float duration /*seconds*/) : Action(self, fallback)
-    {
-        mTimer.duration = duration;
-    }
-
-    ActionType Type() final { return WAIT; }
-    Node* Evaluate(const Entity& entity, World& world) final;
-
-private:
-    Timer mTimer;
 };
 
 class SeekAction : public Action
@@ -133,8 +126,9 @@ public:
 class CloseAttackAction : public Action
 {
 public:
-    CloseAttackAction(Enemy& self, const Sound& sound) : Action(self), mSound(sound)
+    CloseAttackAction(Enemy& self, Action* fallback, Sound* sound) : Action(self, fallback), mSound(sound)
     {
+        assert(mFallback != nullptr);
         mTimer.duration = 0.05f;
         mTimer.elapsed = mTimer.duration;
     }
@@ -144,14 +138,15 @@ public:
 
 private:
     Timer mTimer;
-    const Sound& mSound;
+    Sound* mSound;
 };
 
 class RangedAttackAction : public Action
 {
 public:
-    RangedAttackAction(Enemy& self, const Sound& sound) : Action(self), mSound(sound)
+    RangedAttackAction(Enemy& self, Action* fallback, Sound* sound) : Action(self, fallback), mSound(sound)
     {
+        assert(mFallback != nullptr);
         mTimer.duration = 2.5f;
         mTimer.elapsed = mTimer.duration;
     }
@@ -161,5 +156,5 @@ public:
 
 private:
     Timer mTimer;
-    const Sound& mSound;
+    Sound* mSound;
 };
