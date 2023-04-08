@@ -36,6 +36,17 @@ bool ResolveCollisions(Vector2& point, float radius, const Obstacles& obstacles)
 Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles);
 Vector2 Patrol(const Points& points, const Rigidbody& rb, size_t& index, float maxSpeed, float slowRadius, float pointRadius);
 
+struct Timer
+{
+    float elapsed = 0.0f;
+    float duration = 0.0f;
+
+    float Percent() { return elapsed / duration; }
+    bool Expired() { return elapsed >= duration; }
+    void Reset() { elapsed = 0.0f; }
+    void Tick(float dt) { elapsed += dt; }
+};
+
 struct Entity : public Rigidbody
 {
     string name;
@@ -51,15 +62,36 @@ struct Enemy : public Entity
     float detectionRadius = 0.0f;
     float combatRadius = 0.0f;
     float probeLength = 0.0f;
+
+    // Used to ensure we don't do stuff like fire projectiles every frame of the attack action
+    enum ActionType
+    {
+        PATROL,
+        FIND_VISIBILITY,
+        FIND_COVER,
+        SEEK,
+        FLEE,
+        ARRIVE,
+        CLOSE_ATTACK,
+        RANGED_ATTACK,
+        WAIT,
+    } prev = WAIT, curr = WAIT;
 };
 
 struct Player : public Entity {};
+
+struct World
+{
+    Points points;
+    Obstacles obstacles;
+    vector<Entity> projectiles;
+};
 
 class Node
 {
 public:
     Node(Enemy& self) : mSelf(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) = 0;
+    virtual Node* Evaluate(const Entity& entity, World& world) = 0;
 
 protected:
     Enemy& mSelf;
@@ -77,7 +109,7 @@ class Action : public Node
 {
 public:
     Action(Enemy& self, Action* fallback = nullptr) : Node(self), mFallback(fallback) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
         // nullptr because an action node is a leaf!
         return nullptr;
@@ -85,13 +117,20 @@ public:
     
 protected:
     Action* mFallback = nullptr;
+
+    void Log(const string& message)
+    {
+#if LOG_ACTIONS
+        cout << message << endl;
+#endif
+    }
 };
 
 class DetectedCondition : public Condition
 {
 public:
     DetectedCondition(Enemy& self) : Condition(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
         return DistanceSqr(mSelf.pos, entity.pos) <= mSelf.detectionRadius * mSelf.detectionRadius ? yes : no;
     }
@@ -101,21 +140,33 @@ class VisibleCondition : public Condition
 {
 public:
     VisibleCondition(Enemy& self) : Condition(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
         // Doesn't take direction/FoV into account. An omniscient AI leads to better gameplay in this case!
         Vector2 detectionEnd = mSelf.pos + Normalize(entity.pos - mSelf.pos) * mSelf.detectionRadius;
-        return IsCircleVisible(mSelf.pos, detectionEnd, entity.Collider(), obstacles) ? yes : no;
+        return IsCircleVisible(mSelf.pos, detectionEnd, entity.Collider(), world.obstacles) ? yes : no;
     }
 };
 
-class CombatCondition : public Condition
+class CloseCombatCondition : public Condition
 {
 public:
-    CombatCondition(Enemy& self) : Condition(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    CloseCombatCondition(Enemy& self) : Condition(self) {}
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
+        // CCE attacks player if within combat radius
         return DistanceSqr(mSelf.pos, entity.pos) <= mSelf.combatRadius * mSelf.combatRadius ? yes : no;
+    }
+};
+
+class RangedCombatCondition : public Condition
+{
+public:
+    RangedCombatCondition(Enemy& self) : Condition(self) {}
+    virtual Node* Evaluate(const Entity& entity, World& world) override
+    {
+        // RCE attacks player if NOT within radius
+        return DistanceSqr(mSelf.pos, entity.pos) >= mSelf.combatRadius * mSelf.combatRadius ? yes : no;
     }
 };
 
@@ -123,60 +174,106 @@ class PatrolAction : public Action
 {
 public:
     PatrolAction(Enemy& self) : Action(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
-        mSelf.acc = Patrol(points, mSelf, mSelf.point, mSelf.speed, 200.0f, 100.0f);
-#if LOG_ACTIONS
-        cout << mSelf.name + " patrolling" << endl;
-#endif
+        mSelf.acc = Patrol(world.points, mSelf, mSelf.point, mSelf.speed, 200.0f, 100.0f);
+        Log(mSelf.name + " patrolling");
         return nullptr;
     }
 };
 
-class VisibilityAction : public Action
+class FindVisibilityAction : public Action
 {
 public:
-    VisibilityAction(Enemy& self, Action* fallback) :
+    FindVisibilityAction(Enemy& self, Action* fallback) :
         Action(self, fallback) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
         // Seek nearest enemy-visible tile
         vector<size_t> visibleTiles = VisibleTiles(entity.Collider(), mSelf.detectionRadius,
-            obstacles, OverlapTiles(From({ mSelf.pos, mSelf.detectionRadius })));
+            world.obstacles, OverlapTiles(From({ mSelf.pos, mSelf.detectionRadius })));
         
         // Ensure points aren't too close to obstacles
         Points visiblePoints(visibleTiles.size());
         for (size_t i = 0; i < visiblePoints.size(); i++)
             visiblePoints[i] = GridToScreen(visibleTiles[i]) + Vector2{TILE_WIDTH * 0.5f, TILE_HEIGHT * 0.5f};
 
-#if LOG_ACTIONS
-        if (!visiblePoints.empty())
-            cout << mSelf.name + " finding visibility to " + entity.name << endl;
-        else
-            cout << mSelf.name + " falling back" << endl;
-#endif
-
         if (!visiblePoints.empty())
         {
+            Log(mSelf.name + " finding visibility to " + entity.name);
             mSelf.acc = Seek(NearestPoint(mSelf.pos, visiblePoints), mSelf, mSelf.speed);
             return nullptr;
         }
 
         assert(mFallback != nullptr);
-        return mFallback->Evaluate(entity, points, obstacles);
+        Log(mSelf.name + " falling back");
+        return mFallback->Evaluate(entity, world);
     }
 };
 
-class TargetAction : public Action
+class FindCoverAction : public Action
 {
 public:
-    TargetAction(Enemy& self) : Action(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    FindCoverAction(Enemy& self, Action* fallback) : Action(self, fallback) {}
+    virtual Node* Evaluate(const Entity& entity, World& world) override
+    {
+        Log(mSelf.name + " finding cover from " + entity.name);
+        return nullptr;
+    }
+};
+
+class WaitAction : public Action
+{
+public:
+    WaitAction(Enemy& self, Action* fallback, float duration /*seconds*/) : Action(self, fallback)
+    {
+        mTimer.duration = duration;
+    }
+
+    virtual Node* Evaluate(const Entity& entity, World& world) override
+    {
+
+        mTimer.Tick(GetFrameTime());
+        Log(mSelf.name + " waiting: " + to_string(mTimer.Percent() * 100.0f) + "%");
+        return nullptr;
+    }
+
+private:
+    Timer mTimer;
+};
+
+class SeekAction : public Action
+{
+public:
+    SeekAction(Enemy& self) : Action(self) {}
+    virtual Node* Evaluate(const Entity& entity, World& world) override
+    {
+        mSelf.acc = Seek(entity.pos, mSelf, mSelf.speed);
+        Log(mSelf.name + " seeking to " + entity.name);
+        return nullptr;
+    }
+};
+
+class FleeAction : public Action
+{
+public:
+    FleeAction(Enemy& self) : Action(self) {}
+    virtual Node* Evaluate(const Entity& entity, World& world) override
+    {
+        mSelf.acc = Negate(Seek(entity.pos, mSelf, mSelf.speed));
+        Log(mSelf.name + " fleeing from " + entity.name);
+        return nullptr;
+    }
+};
+
+class ArriveAction : public Action
+{
+public:
+    ArriveAction(Enemy& self) : Action(self) {}
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
         mSelf.acc = Arrive(entity.pos, mSelf, mSelf.speed, 100.0f, 5.0f);
-#if LOG_ACTIONS
-        cout << mSelf.name + " moving to " + entity.name << endl;
-#endif
+        Log(mSelf.name + " arriving at " + entity.name);
         return nullptr;
     }
 };
@@ -185,26 +282,25 @@ class CloseAttackAction : public Action
 {
 public:
     CloseAttackAction(Enemy& self) : Action(self) {}
-    virtual Node* Evaluate(const Entity& entity, const Points& points, const Obstacles& obstacles) override
+    virtual Node* Evaluate(const Entity& entity, World& world) override
     {
         mSelf.acc = Arrive(entity.pos, mSelf, mSelf.speed, 100.0f, 5.0f);
-#if LOG_ACTIONS
-        cout << mSelf.name + " attacking " + entity.name << endl;
-#endif
+        Log(mSelf.name + " attacking " + entity.name);
         return nullptr;
     }
 };
 
-void Traverse(Node* node, const Entity& entity, const Points& points, const Obstacles& obstacles)
+void Traverse(Node* node, const Entity& entity, World& world)
 {
     while (node != nullptr)
-        node = node->Evaluate(entity, points, obstacles);
+        node = node->Evaluate(entity, world);
 }
 
 int main(void)
 {
-    Obstacles obstacles = LoadObstacles();
-    Points points = LoadPoints();
+    World world;
+    world.obstacles = LoadObstacles();
+    world.points = LoadPoints();
 
     Player player;
     player.radius = 60.0f;
@@ -238,10 +334,11 @@ int main(void)
 
     DetectedCondition cceIsPlayerDetected(cce);
     VisibleCondition cceIsPlayerVisible(cce);
-    CombatCondition cceIsPlayerCombat(cce);
+    CloseCombatCondition cceIsPlayerCombat(cce);
+
     PatrolAction ccePatrol(cce);
-    VisibilityAction cceFindVisibility(cce, &ccePatrol);
-    TargetAction cceArrive(cce);
+    FindVisibilityAction cceFindVisibility(cce, &ccePatrol);
+    ArriveAction cceArrive(cce);
     CloseAttackAction cceAttack(cce);
 
     Node* cceRoot = &cceIsPlayerDetected;
@@ -282,21 +379,20 @@ int main(void)
         player.pos = GetMousePosition();
         const Vector2 playerEnd = player.pos + player.dir * 500.0f;
 
-        //Melee(cce, ccd, { player.position }, { player.radius }, points, obstacles);
-        Traverse(cceRoot, player, points, obstacles);
-        cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, obstacles);
+        Traverse(cceRoot, player, world);
+        cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
         Integrate(cce, dt);
 
-        rce.acc = Patrol(points, rce, rce.point, rce.speed, 200.0f, 100.0f);
-        rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, obstacles);
+        rce.acc = Patrol(world.points, rce, rce.point, rce.speed, 200.0f, 100.0f);
+        rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
         Integrate(rce, dt);
 
-        bool playerCollision = ResolveCollisions(player.pos, player.radius, obstacles);
-        bool cceCollision = ResolveCollisions(cce.pos, cce.radius, obstacles);
-        bool rceCollision = ResolveCollisions(rce.pos, rce.radius, obstacles);
+        bool playerCollision = ResolveCollisions(player.pos, player.radius, world.obstacles);
+        bool cceCollision = ResolveCollisions(cce.pos, cce.radius, world.obstacles);
+        bool rceCollision = ResolveCollisions(rce.pos, rce.radius, world.obstacles);
 
         vector<Vector2> intersections;
-        for (const Circle& obstacle : obstacles)
+        for (const Circle& obstacle : world.obstacles)
         {
             Vector2 poi;
             if (CheckCollisionLineCircle(player.pos, playerEnd, obstacle, poi))
@@ -312,11 +408,11 @@ int main(void)
         {
             Rectangle cceOverlapRec = From({ cce.pos, cce.detectionRadius });
             vector<size_t> cceVisibleTiles =
-                VisibleTiles(player.Collider(), cce.detectionRadius, obstacles, OverlapTiles(cceOverlapRec));
+                VisibleTiles(player.Collider(), cce.detectionRadius, world.obstacles, OverlapTiles(cceOverlapRec));
 
             Rectangle rceOverlapRec = From({ rce.pos, rce.detectionRadius });
             vector<size_t> rceVisibleTiles =
-                VisibleTiles(player.Collider(), rce.detectionRadius, obstacles, OverlapTiles(rceOverlapRec));
+                VisibleTiles(player.Collider(), rce.detectionRadius, world.obstacles, OverlapTiles(rceOverlapRec));
                 
             DrawRectangleRec(rceOverlapRec, rceOverlapColor);
             for (size_t i : cceVisibleTiles)
@@ -347,18 +443,18 @@ int main(void)
 
         // Render obstacle intersections
         Vector2 obstaclesPoi;
-        if (NearestIntersection(player.pos, playerEnd, obstacles, obstaclesPoi))
+        if (NearestIntersection(player.pos, playerEnd, world.obstacles, obstaclesPoi))
             DrawCircleV(obstaclesPoi, 10.0f, playerIntersection ? RED : playerColor);
 
         // Render obstacles
-        for (const Circle& obstacle : obstacles)
+        for (const Circle& obstacle : world.obstacles)
             DrawCircle(obstacle, GRAY);
 
         // Render points
-        for (size_t i = 0; i < points.size(); i++)
+        for (size_t i = 0; i < world.points.size(); i++)
         {
-            const Vector2& p0 = points[i];
-            const Vector2& p1 = points[(i + 1) % points.size()];
+            const Vector2& p0 = world.points[i];
+            const Vector2& p1 = world.points[(i + 1) % world.points.size()];
             DrawLineV(p0, p1, GRAY);
             DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
         }
@@ -378,23 +474,25 @@ int main(void)
             
             ImGui::Separator();
             if (ImGui::Button("Save Obstacles"))
-                SaveObstacles(obstacles);
+                SaveObstacles(world.obstacles);
             if (ImGui::Button("Add Obstacle"))
-                obstacles.push_back({ {}, 10.0f });
+                world.obstacles.push_back({ {}, 10.0f });
             if (ImGui::Button("Remove Obstacle"))
-                obstacles.pop_back();
-            for (size_t i = 0; i < obstacles.size(); i++)
-                ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(), (float*)&obstacles[i], 0.0f, 1200.0f);
+                world.obstacles.pop_back();
+            for (size_t i = 0; i < world.obstacles.size(); i++)
+                ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(),
+                    (float*)&world.obstacles[i], 0.0f, 1200.0f);
 
             ImGui::Separator();
             if (ImGui::Button("Save Points"))
-                SavePoints(points);
+                SavePoints(world.points);
             if (ImGui::Button("Add Point"))
-                points.push_back({ {}, 10.0f });
+                world.points.push_back({ {}, 10.0f });
             if (ImGui::Button("Remove Point"))
-                points.pop_back();
-            for (size_t i = 0; i < points.size(); i++)
-                ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(), (float*)&points[i], 0.0f, 1200.0f);
+                world.points.pop_back();
+            for (size_t i = 0; i < world.points.size(); i++)
+                ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(),
+                    (float*)&world.points[i], 0.0f, 1200.0f);
 
             rlImGuiEnd();
         }
