@@ -1,52 +1,22 @@
 #pragma once
 #include "raylib.h"
 #include "Math.h"
-#include <array>
-#include <vector>
-#include <algorithm>
+#include "Geometry.h"
+#include <cassert>
 
-struct Circle
-{
-    Vector2 position{};
-    float radius = 0.0f;
-};
-
-using Points = std::vector<Vector2>;
-
-using Obstacles = std::vector<Circle>;
-
-Rectangle From(Circle circle)
-{
-    return {
-        circle.position.x - circle.radius, circle.position.y - circle.radius,
-        circle.radius * 2.0f, circle.radius * 2.0f
-    };
-}
-
-Circle From(Rectangle rectangle)
-{
-    Vector2 center = { rectangle.x + rectangle.width * 0.5f, rectangle.y + rectangle.height * 0.5f };
-    return { center, std::max(rectangle.width, rectangle.height) * 0.5f };
-}
-
-void DrawCircle(Circle circle, Color color)
-{
-    DrawCircleV(circle.position, circle.radius, color);
-}
-
-bool CheckCollisionPointCircle(Vector2 point, Circle circle)
+inline bool CheckCollisionPointCircle(Vector2 point, Circle circle)
 {
     return DistanceSqr(circle.position, point) <= circle.radius * circle.radius;
 }
 
-bool CheckCollisionCircles(Circle circle1, Circle circle2)
+inline bool CheckCollisionCircles(Circle circle1, Circle circle2)
 {
     return DistanceSqr(circle1.position, circle2.position) <=
         powf(circle1.radius + circle2.radius, 2.0f);
 }
 
 // MTV (minimum translation vector) resolves circle 2 from circle 1
-bool CheckCollisionCircles(Circle circle1, Circle circle2, Vector2& mtv)
+inline bool CheckCollisionCircles(Circle circle1, Circle circle2, Vector2& mtv)
 {
     if (!CheckCollisionCircles(circle1, circle2)) return false;
     Vector2 AB = circle2.position - circle1.position;
@@ -56,13 +26,13 @@ bool CheckCollisionCircles(Circle circle1, Circle circle2, Vector2& mtv)
     return true;
 }
 
-bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
+inline bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
 {
     Vector2 nearest = NearestPoint(lineStart, lineEnd, circle.position);
     return DistanceSqr(nearest, circle.position) <= circle.radius * circle.radius;
 }
 
-bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle, Vector2& poi)
+inline bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle, Vector2& poi)
 {
     Vector2 dc = lineStart - circle.position;
     Vector2 dx = lineEnd - lineStart;
@@ -107,7 +77,7 @@ bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle,
     return false;
 }
 
-Vector2 NearestPoint(const Vector2& point, const Points& points)
+inline Vector2 NearestPoint(const Vector2& point, const Points& points)
 {
     assert(!points.empty());
     return *min_element(points.begin(), points.end(),
@@ -117,7 +87,7 @@ Vector2 NearestPoint(const Vector2& point, const Points& points)
         });
 }
 
-bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles, Vector2& poi)
+inline bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles, Vector2& poi)
 {
     Points intersections;
     intersections.reserve(obstacles.size());
@@ -134,7 +104,7 @@ bool NearestIntersection(Vector2 lineStart, Vector2 lineEnd, const Obstacles& ob
     return !intersections.empty();
 }
 
-bool IsPointVisible(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
+inline bool IsPointVisible(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacles)
 {
     for (const Circle& obstacle : obstacles)
     {
@@ -144,7 +114,7 @@ bool IsPointVisible(Vector2 lineStart, Vector2 lineEnd, const Obstacles& obstacl
     return true;
 }
 
-bool IsCircleVisible(Vector2 lineStart, Vector2 lineEnd, Circle circle, const Obstacles& obstacles)
+inline bool IsCircleVisible(Vector2 lineStart, Vector2 lineEnd, Circle circle, const Obstacles& obstacles)
 {
     Vector2 circlePoi;
     bool circleCollision = CheckCollisionLineCircle(lineStart, lineEnd, circle, circlePoi);

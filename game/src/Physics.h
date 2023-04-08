@@ -1,4 +1,5 @@
 #pragma once
+#include "raylib.h"
 #include "Math.h"
 
 struct Rigidbody
@@ -13,7 +14,7 @@ struct Rigidbody
 
 // v2 = v1 + a(t)
 // p2 = p1 + v2(t) + 0.5a(t^2)
-void Integrate(Rigidbody& rb, float dt)
+inline void Integrate(Rigidbody& rb, float dt)
 {
     rb.vel = rb.vel + rb.acc * dt;
     rb.pos = rb.pos + rb.vel * dt + rb.acc * dt * dt * 0.5f;
@@ -23,25 +24,25 @@ void Integrate(Rigidbody& rb, float dt)
 // vf^2 = vi^2 + 2a(d)
 // 0^2 = vi^2 + 2a(d)
 // -vi^2 / 2d = a
-Vector2 Decelerate(const Vector2& pos, const Rigidbody& rb)
+inline Vector2 Decelerate(const Vector2& pos, const Rigidbody& rb)
 {
     float d = Length(pos - rb.pos);
     float a = LengthSqr(rb.vel) / (d * 2.0f);
     return Negate(Normalize(rb.vel)) * a;
 }
 
-Vector2 Acceleration(const Vector2& vi, const Vector2& vf, float dt)
+inline Vector2 Acceleration(const Vector2& vi, const Vector2& vf, float dt)
 {
     return (vf - vi) / dt;
 }
 
 // Accelerate towards target
-Vector2 Seek(const Vector2& pos, const Rigidbody& rb, float maxSpeed)
+inline Vector2 Seek(const Vector2& pos, const Rigidbody& rb, float maxSpeed)
 {
     return Normalize(pos - rb.pos) * maxSpeed - rb.vel;
 }
 
-Vector2 Arrive(const Vector2& pos, const Rigidbody& rb, float maxSpeed, float slowRadius, float slowFactor = 1.0f)
+inline Vector2 Arrive(const Vector2& pos, const Rigidbody& rb, float maxSpeed, float slowRadius, float slowFactor = 1.0f)
 {
     Vector2 acc = Seek(pos, rb, maxSpeed);
     float distance = Distance(pos, rb.pos);
