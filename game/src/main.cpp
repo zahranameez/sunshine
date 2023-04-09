@@ -89,6 +89,9 @@ int main(void)
     rlImGuiSetup(true);
     SetTargetFPS(60);
 
+    Sound playerDeathSound = LoadSound("../game/assets/audio/death.mp3");
+    Sound playerHitSound = LoadSound("../game/assets/audio/impact1.wav");
+    Sound enemyHitSound = LoadSound("../game/assets/audio/impact2.wav");
     Sound cceAttackSound = LoadSound("../game/assets/audio/shotgun.wav");
     Sound rceAttackSound = LoadSound("../game/assets/audio/sniper.wav");
     Sound playerAttackSound = LoadSound("../game/assets/audio/rifle.wav");
@@ -100,10 +103,10 @@ int main(void)
     world.points = LoadPoints();
 
     Enemy cce;
-    cce.pos = { 1000.0f, 250.0f };
+    cce.pos = { SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.1f };
     cce.dir = { -1.0f, 0.0f };
     cce.angularSpeed = DEG2RAD * 200.0f;
-    cce.point = 0;
+    cce.point = 5;
     cce.speed = 500.0f;
     cce.radius = 50.0f;
     cce.detectionRadius = 400.0f;
@@ -112,7 +115,7 @@ int main(void)
     cce.name = "Close-combat enemy";
 
     Enemy rce;
-    rce.pos = { 10.0f, 10.0f };
+    rce.pos = { SCREEN_WIDTH * 0.1f, SCREEN_HEIGHT * 0.1f };
     rce.dir = { 1.0f, 0.0f };
     rce.angularSpeed = DEG2RAD * 100.0f;
     rce.point = 0;
@@ -169,7 +172,7 @@ int main(void)
     rceIsPlayerCombat.yes = &rceAttack;
 
     Player player;
-    player.pos = { SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f };
+    player.pos = { SCREEN_WIDTH * 0.8f, SCREEN_HEIGHT * 0.8f };
     player.radius = 60.0f;
     player.dir = { 1.0f, 0.0f };
     player.angularSpeed = 250.0f;
@@ -249,26 +252,38 @@ int main(void)
 
         world.projectiles.erase(
             remove_if(world.projectiles.begin(), world.projectiles.end(),
-                [&player, &cce, &rce, &world](const Projectile& projectile) -> bool
+                [&player, &cce, &rce, &world, &playerDeathSound, &playerHitSound, &enemyHitSound](const Projectile& projectile) -> bool
                 {
                     if (CheckCollisionCircles(player.Collider(), projectile.Collider()))
                     {
                         if (projectile.type == Projectile::ENEMY)
+                        {
                             player.health -= projectile.damage;
+                            PlaySound(playerHitSound);
+
+                            if (player.health > 0.0f && player.health - projectile.damage <= 0.0f)
+                                PlaySound(playerDeathSound);
+                        }
                         return true;
                     }
 
                     if (CheckCollisionCircles(cce.Collider(), projectile.Collider()))
                     {
                         if (projectile.type == Projectile::PLAYER)
+                        {
                             cce.health -= projectile.damage;
+                            PlaySound(enemyHitSound);
+                        }
                         return true;
                     }
 
                     if (CheckCollisionCircles(rce.Collider(), projectile.Collider()))
                     {
                         if (projectile.type == Projectile::PLAYER)
+                        {
                             rce.health -= projectile.damage;
+                            PlaySound(enemyHitSound);
+                        }
                         return true;
                     }
 
@@ -375,12 +390,15 @@ DRAW:
             DrawCircleV(obstacle.position, obstacle.radius, GRAY);
 
         // Render points
-        for (size_t i = 0; i < world.points.size(); i++)
+        if (showPoints)
         {
-            const Vector2& p0 = world.points[i];
-            const Vector2& p1 = world.points[(i + 1) % world.points.size()];
-            DrawLineV(p0, p1, GRAY);
-            DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
+            for (size_t i = 0; i < world.points.size(); i++)
+            {
+                const Vector2& p0 = world.points[i];
+                const Vector2& p1 = world.points[(i + 1) % world.points.size()];
+                DrawLineV(p0, p1, GRAY);
+                DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
+            }
         }
         
         // Render GUI
@@ -389,6 +407,7 @@ DRAW:
         {
             rlImGuiBegin();
             ImGui::Checkbox("Use debug", &useDebug);
+            ImGui::Checkbox("Show points", &showPoints);
             ImGui::SliderFloat2("CCE Position", (float*)&cce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat("CCE Detection Radius", &cce.detectionRadius, 0.0f, 1500.0f);
