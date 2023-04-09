@@ -64,7 +64,7 @@ bool ResolveCollisions(Entity& entity, const Obstacles& obstacles)
     return false;
 }
 
-void RenderHealthBar(const Entity& entity, Color background = DARKGRAY, Color foreground = RED)
+void DrawHealthBar(const Entity& entity, Color background = DARKGRAY, Color foreground = RED)
 {
     const float healthBarWidth = 150.0f;
     const float healthBarHeight = 20.0f;
@@ -74,7 +74,7 @@ void RenderHealthBar(const Entity& entity, Color background = DARKGRAY, Color fo
     DrawRectangle(x, y, healthBarWidth * entity.HealthPercent(), healthBarHeight, foreground);
 }
 
-void CenterText(const char* text, Rectangle rec, int fontSize, Color color)
+void DrawTextCentered(const char* text, Rectangle rec, int fontSize, Color color)
 {
     DrawText(text,
         rec.x + rec.width * 0.5f - MeasureText(text, fontSize) * 0.5f,
@@ -89,7 +89,9 @@ int main(void)
     rlImGuiSetup(true);
     SetTargetFPS(60);
 
-    Sound playerDeathSound = LoadSound("../game/assets/audio/death.mp3");
+    Sound enemyDeath1Sound = LoadSound("../game/assets/audio/ownage.mp3");
+    Sound enemyDeath2Sound = LoadSound("../game/assets/audio/doublekill.mp3");
+    Sound playerDeathSound = LoadSound("../game/assets/audio/headshot.mp3");
     Sound playerHitSound = LoadSound("../game/assets/audio/impact1.wav");
     Sound enemyHitSound = LoadSound("../game/assets/audio/impact2.wav");
     Sound cceAttackSound = LoadSound("../game/assets/audio/shotgun.wav");
@@ -98,9 +100,19 @@ int main(void)
     SetSoundVolume(cceAttackSound, 0.5f);
     SetSoundVolume(playerAttackSound, 0.5f);
 
+    Texture playerTex = LoadTexture("../game/assets/textures/enterprise.png");
+    Texture enemyTex = LoadTexture("../game/assets/textures/d7.png");
+    Texture nebulaTex = LoadTexture("../game/assets/textures/nebula.png");
+    Texture galaxyTex = LoadTexture("../game/assets/textures/galaxy.png");
+
+    Rectangle playerSrc = { 0.0f, 0.0f, playerTex.width, playerTex.height };
+    Rectangle enemySrc = { 0.0f, 0.0f, enemyTex.width, enemyTex.height };
+    Rectangle nebulaSrc = { 0.0f, 0.0f, nebulaTex.width, nebulaTex.height };
+    Rectangle galaxySrc = { 0.0f, 0.0f, galaxyTex.width, galaxyTex.height };
+
     World world;
-    world.obstacles = LoadObstacles();
     world.points = LoadPoints();
+    world.obstacles = LoadObstacles();
 
     Enemy cce;
     cce.pos = { SCREEN_WIDTH * 0.9f, SCREEN_HEIGHT * 0.1f };
@@ -195,10 +207,22 @@ int main(void)
     const Color rceVisibleColor = { 255, 0, 255, 128 };     // MAGENTA
 
     Screen screen = Screen::GAME;
+    size_t enemiesDead = 0;
 
     bool useGUI = false;
     bool useDebug = false;
+    
     bool showPoints = false;
+    bool showObstacles = false;
+    bool showEntities = false;
+    bool showIntersection = false;
+    bool showAvoidance = false;
+
+    bool cceShowTiles = false;
+    bool rceShowTiles = false;
+    bool cceEnabled = true;
+    bool rceEnabled = true;
+
     while (!WindowShouldClose())
     {
         // First goto statement in 7 years (2016 when I started uni). Legitimately clearner than wrapping update in if :'D
@@ -239,52 +263,70 @@ int main(void)
             }
         }
 
-        Traverse(cceRoot, player, world);
-        cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
-        Integrate(cce, dt);
-
-        Traverse(rceRoot, player, world);
-        rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
-        Integrate(rce, dt);
+        if (cceEnabled)
+        {
+            Traverse(cceRoot, player, world);
+            cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
+            Integrate(cce, dt);
+        }
+        
+        if (rceEnabled)
+        {
+            Traverse(rceRoot, player, world);
+            rce.acc = rce.acc + Avoid(rce, rce.probeLength, dt, world.obstacles);
+            Integrate(rce, dt);
+        }
 
         for (Projectile& projectile : world.projectiles)
             Integrate(projectile, dt);
 
+        size_t prevEnemiesDead = enemiesDead;
         world.projectiles.erase(
             remove_if(world.projectiles.begin(), world.projectiles.end(),
-                [&player, &cce, &rce, &world, &playerDeathSound, &playerHitSound, &enemyHitSound](const Projectile& projectile) -> bool
+                [&player, &cce, &rce, &world, &playerDeathSound, &playerHitSound, &enemyHitSound, &cceEnabled, &rceEnabled, &enemiesDead]
+                (const Projectile& projectile) -> bool
                 {
                     if (CheckCollisionCircles(player.Collider(), projectile.Collider()))
                     {
                         if (projectile.type == Projectile::ENEMY)
                         {
-                            player.health -= projectile.damage;
-                            PlaySound(playerHitSound);
-
                             if (player.health > 0.0f && player.health - projectile.damage <= 0.0f)
                                 PlaySound(playerDeathSound);
+
+                            player.health -= projectile.damage;
+                            PlaySound(playerHitSound);
                         }
                         return true;
                     }
 
-                    if (CheckCollisionCircles(cce.Collider(), projectile.Collider()))
+                    if (cceEnabled)
                     {
-                        if (projectile.type == Projectile::PLAYER)
+                        if (CheckCollisionCircles(cce.Collider(), projectile.Collider()))
                         {
-                            cce.health -= projectile.damage;
-                            PlaySound(enemyHitSound);
+                            if (projectile.type == Projectile::PLAYER)
+                            {
+                                cce.health -= projectile.damage;
+                                PlaySound(enemyHitSound);
+                                cceEnabled = cce.health > 0.0f;
+                                if (!cceEnabled) ++enemiesDead;
+                            }
+                            return true;
                         }
-                        return true;
                     }
-
-                    if (CheckCollisionCircles(rce.Collider(), projectile.Collider()))
+                    
+                    if (rceEnabled)
                     {
-                        if (projectile.type == Projectile::PLAYER)
+                        if (CheckCollisionCircles(rce.Collider(), projectile.Collider()))
                         {
-                            rce.health -= projectile.damage;
-                            PlaySound(enemyHitSound);
+                            if (projectile.type == Projectile::PLAYER)
+                            {
+                                rce.health -= projectile.damage;
+                                PlaySound(enemyHitSound);
+                                rceEnabled = rce.health > 0.0f;
+                                if (!rceEnabled) ++enemiesDead;
+                            }
+                            return true;
                         }
-                        return true;
                     }
 
                     for (const Circle& obstacle : world.obstacles)
@@ -297,117 +339,166 @@ int main(void)
                 }
             ),
         world.projectiles.end());
+
+        if (prevEnemiesDead != enemiesDead)
+        {
+            if (enemiesDead == 1)
+                PlaySound(enemyDeath1Sound);
+            else if (enemiesDead == 2)
+                PlaySound(enemyDeath2Sound);
+        }
         
 DRAW:
         bool cceCollision = ResolveCollisions(cce, world.obstacles);
         bool rceCollision = ResolveCollisions(rce, world.obstacles);
         bool playerCollision = ResolveCollisions(player, world.obstacles);
-        const Vector2 playerEnd = player.pos + player.dir * 500.0f;
-
-        vector<Vector2> intersections;
-        for (const Circle& obstacle : world.obstacles)
-        {
-            Vector2 poi;
-            if (CheckCollisionLineCircle(player.pos, playerEnd, obstacle, poi))
-                intersections.push_back(poi);
-        }
-        bool playerIntersection = !intersections.empty();
 
         if (player.health <= 0.0f) screen = Screen::LOSE;
         else if (cce.health <= 0.0f && rce.health <= 0.0f) screen = Screen::WIN;
 
         BeginDrawing();
         ClearBackground(background);
+        DrawTexturePro(galaxyTex, galaxySrc, SCREEN_REC, {}, 0.0f, WHITE);
 
         if (screen != Screen::GAME)
         {
             if (screen == Screen::WIN)
             {
                 DrawRectangleRec(SCREEN_REC, GREEN);
-                CenterText("You win :)", SCREEN_REC, 30, WHITE);
+                DrawTextCentered("You win :)", SCREEN_REC, 30, WHITE);
             }
             else
             {
                 DrawRectangleRec(SCREEN_REC, RED);
-                CenterText("You lose :(", SCREEN_REC, 30, BLACK);
+                DrawTextCentered("You lose :(", SCREEN_REC, 30, BLACK);
             }
             EndDrawing();
             continue;
         }
 
-        // Render debug
         if (useDebug)
         {
-            Rectangle cceOverlapRec = From({ cce.pos, cce.detectionRadius });
-            vector<size_t> cceVisibleTiles =
-                VisibleTiles(player.Collider(), cce.detectionRadius, world.obstacles, OverlapTiles(cceOverlapRec));
+            if (cceShowTiles)
+            {
+                Rectangle cceOverlapRec = From({ cce.pos, cce.detectionRadius });
+                vector<size_t> cceVisibleTiles =
+                    VisibleTiles(player.Collider(), cce.detectionRadius, world.obstacles, OverlapTiles(cceOverlapRec));
 
-            Rectangle rceOverlapRec = From({ rce.pos, rce.detectionRadius });
-            vector<size_t> rceVisibleTiles =
-                VisibleTiles(player.Collider(), rce.detectionRadius, world.obstacles, OverlapTiles(rceOverlapRec));
-                
-            DrawRectangleRec(cceOverlapRec, cceOverlapColor);
-            for (size_t i : cceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
+                DrawRectangleRec(cceOverlapRec, cceOverlapColor);
+                for (size_t i : cceVisibleTiles)
+                    DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, cceVisibleColor);
+            }
             
-            DrawRectangleRec(rceOverlapRec, rceOverlapColor);
-            for (size_t i : rceVisibleTiles)
-                DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
+            if (rceShowTiles)
+            {
+                Rectangle rceOverlapRec = From({ rce.pos, rce.detectionRadius });
+                vector<size_t> rceVisibleTiles =
+                    VisibleTiles(player.Collider(), rce.detectionRadius, world.obstacles, OverlapTiles(rceOverlapRec));
+
+                DrawRectangleRec(rceOverlapRec, rceOverlapColor);
+                for (size_t i : rceVisibleTiles)
+                    DrawRectangleV(GridToScreen(i), { TILE_WIDTH, TILE_HEIGHT }, rceVisibleColor);
+            }
+
+            if (showPoints)
+            {
+                for (size_t i = 0; i < world.points.size(); i++)
+                {
+                    const Vector2& p0 = world.points[i];
+                    const Vector2& p1 = world.points[(i + 1) % world.points.size()];
+                    DrawLineV(p0, p1, GRAY);
+                    DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
+                }
+            }
+
+            if (showObstacles)
+            {
+                for (const Circle& obstacle : world.obstacles)
+                    DrawCircleV(obstacle.position, obstacle.radius, GRAY);
+            }
+
+            if (showEntities)
+            {
+                DrawCircleV(cce.pos, cce.radius, cceCollision ? RED : cceColor);
+                DrawCircleV(rce.pos, cce.radius, rceCollision ? RED : rceColor);
+                DrawLineEx(cce.pos, cce.pos + cce.dir * cce.detectionRadius, 10.0f, cceColor);
+                DrawLineEx(rce.pos, rce.pos + rce.dir * rce.detectionRadius, 10.0f, rceColor);
+                DrawCircleV(player.pos, player.radius, playerCollision ? RED : playerColor);
+            }
+
+            if (showIntersection)
+            {
+                Vector2 obstaclesPoi;
+                if (NearestIntersection(player.pos, player.pos + player.dir * 1500.0f, world.obstacles, obstaclesPoi))
+                    DrawCircleV(obstaclesPoi, 10.0f, RED);
+            }
+
+            if (showAvoidance)
+            {
+                auto drawProbe = [](const Enemy& enemy, float angle, Color color)
+                {
+                    DrawLineEx(enemy.pos, enemy.pos + Rotate(Normalize(enemy.vel), angle * DEG2RAD) * enemy.probeLength,
+                        5.0f, color);
+                };
+
+                drawProbe(cce, -30.0f, cceColor);
+                drawProbe(cce, -15.0f, cceColor);
+                drawProbe(cce,  15.0f, cceColor);
+                drawProbe(cce,  30.0f, cceColor);
+
+                drawProbe(rce, -30.0f, rceColor);
+                drawProbe(rce, -15.0f, rceColor);
+                drawProbe(rce,  15.0f, rceColor);
+                drawProbe(rce,  30.0f, rceColor);
+            }
         }
 
-        // Render entities
-        DrawCircleV(cce.pos, cce.radius, cceCollision ? RED : cceColor);
-        DrawCircleV(rce.pos, cce.radius, rceCollision ? RED : rceColor);
-        DrawCircleV(player.pos, player.radius, playerCollision ? RED : playerColor);
-        DrawLineEx(cce.pos, cce.pos + cce.dir * cce.detectionRadius, 10.0f, cceColor);
-        DrawLineEx(rce.pos, rce.pos + rce.dir * rce.detectionRadius, 10.0f, rceColor);
-        DrawLineEx(player.pos, playerEnd, 10.0f, playerIntersection ? RED : playerColor);
         for (const Projectile& projectile : world.projectiles)
             DrawCircleV(projectile.pos, projectile.radius, projectile.type == Projectile::ENEMY ? RED : GREEN);
 
-        // Health bars
-        RenderHealthBar(cce);
-        RenderHealthBar(rce);
-        RenderHealthBar(player);
-
-        // Avoidance lines
-        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel), -30.0f * DEG2RAD) * cce.probeLength, 5.0f, cceColor);
-        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel), -15.0f * DEG2RAD) * cce.probeLength, 5.0f, cceColor);
-        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel),  15.0f * DEG2RAD) * cce.probeLength, 5.0f, cceColor);
-        DrawLineEx(cce.pos, cce.pos + Rotate(Normalize(cce.vel),  30.0f * DEG2RAD) * cce.probeLength, 5.0f, cceColor);
-        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel), -30.0f * DEG2RAD) * rce.probeLength, 5.0f, rceColor);
-        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel), -15.0f * DEG2RAD) * rce.probeLength, 5.0f, rceColor);
-        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel),  15.0f * DEG2RAD) * rce.probeLength, 5.0f, rceColor);
-        DrawLineEx(rce.pos, rce.pos + Rotate(Normalize(rce.vel),  30.0f * DEG2RAD) * rce.probeLength, 5.0f, rceColor);
-
-        // Render obstacle intersections
-        Vector2 obstaclesPoi;
-        if (NearestIntersection(player.pos, playerEnd, world.obstacles, obstaclesPoi))
-            DrawCircleV(obstaclesPoi, 10.0f, playerIntersection ? RED : playerColor);
-
-        // Render obstacles
         for (const Circle& obstacle : world.obstacles)
-            DrawCircleV(obstacle.position, obstacle.radius, GRAY);
+            DrawTexturePro(nebulaTex, nebulaSrc, From(obstacle), {}, 0.0f, WHITE);
 
-        // Render points
-        if (showPoints)
+        auto drawEntity = [](const Entity& entity, const Texture& tex, const Rectangle& src, Color tint = WHITE)
         {
-            for (size_t i = 0; i < world.points.size(); i++)
-            {
-                const Vector2& p0 = world.points[i];
-                const Vector2& p1 = world.points[(i + 1) % world.points.size()];
-                DrawLineV(p0, p1, GRAY);
-                DrawCircle(p0.x, p0.y, 5.0f, LIGHTGRAY);
-            }
+            const Rectangle dst{ entity.pos.x, entity.pos.y, entity.radius * 2.0f, entity.radius * 2.0f };
+            DrawTexturePro(tex, src, dst, { dst.width * 0.5f, dst.height * 0.5f },
+                SignedAngle({ 1.0f, 0.0f }, entity.dir) * RAD2DEG, tint);
+        };
+
+        if (cceEnabled)
+        {
+            drawEntity(cce, enemyTex, enemySrc, YELLOW);
+            DrawHealthBar(cce);
         }
+
+        if (rceEnabled)
+        {
+            drawEntity(rce, enemyTex, enemySrc, PINK);
+            DrawHealthBar(rce);
+        }
+
+        drawEntity(player, playerTex, enemySrc);
+        DrawLineEx(player.pos, player.pos + player.dir * 250.0f, 10.0f, playerColor);
+        DrawHealthBar(player);
         
-        // Render GUI
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
         if (useGUI)
         {
             rlImGuiBegin();
-            ImGui::Checkbox("Use debug", &useDebug);
-            ImGui::Checkbox("Show points", &showPoints);
+            ImGui::Checkbox("Use Debug", &useDebug);
+
+            ImGui::Checkbox("Show Points", &showPoints);
+            ImGui::Checkbox("Show Obstacles", &showObstacles);
+            ImGui::Checkbox("Show Entities", &showEntities);
+            ImGui::Checkbox("Show Intersections", &showIntersection);
+            ImGui::Checkbox("Show Avoidance", &showAvoidance);
+
+            ImGui::Checkbox("Show CCE Tiles", &cceShowTiles);
+            ImGui::Checkbox("Show RCE Tiles", &rceShowTiles);
+            ImGui::Checkbox("Toggle CCE", &cceEnabled);
+            ImGui::Checkbox("Toggle RCE", &rceEnabled);
+
             ImGui::SliderFloat2("CCE Position", (float*)&cce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat("CCE Detection Radius", &cce.detectionRadius, 0.0f, 1500.0f);
@@ -415,28 +506,34 @@ DRAW:
             ImGui::SliderFloat("CCE Probe Length", &cce.probeLength, 0.0f, 250.0f);
             ImGui::SliderFloat("RCE Probe Length", &rce.probeLength, 0.0f, 250.0f);
             
-            ImGui::Separator();
-            if (ImGui::Button("Save Obstacles"))
-                SaveObstacles(world.obstacles);
-            if (ImGui::Button("Add Obstacle"))
-                world.obstacles.push_back({ {}, 10.0f });
-            if (ImGui::Button("Remove Obstacle"))
-                world.obstacles.pop_back();
-            for (size_t i = 0; i < world.obstacles.size(); i++)
-                ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(),
-                    (float*)&world.obstacles[i], 0.0f, 1200.0f);
+            if (showPoints)
+            {
+                ImGui::Separator();
+                if (ImGui::Button("Save Points"))
+                    SavePoints(world.points);
+                if (ImGui::Button("Add Point"))
+                    world.points.push_back({ {}, 10.0f });
+                if (ImGui::Button("Remove Point"))
+                    world.points.pop_back();
+                for (size_t i = 0; i < world.points.size(); i++)
+                    ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(),
+                        (float*)&world.points[i], 0.0f, 1200.0f);
+            }
 
-            ImGui::Separator();
-            if (ImGui::Button("Save Points"))
-                SavePoints(world.points);
-            if (ImGui::Button("Add Point"))
-                world.points.push_back({ {}, 10.0f });
-            if (ImGui::Button("Remove Point"))
-                world.points.pop_back();
-            for (size_t i = 0; i < world.points.size(); i++)
-                ImGui::SliderFloat2(string("Point " + to_string(i + 1)).c_str(),
-                    (float*)&world.points[i], 0.0f, 1200.0f);
-
+            if (showObstacles)
+            {
+                ImGui::Separator();
+                if (ImGui::Button("Save Obstacles"))
+                    SaveObstacles(world.obstacles);
+                if (ImGui::Button("Add Obstacle"))
+                    world.obstacles.push_back({ {}, 10.0f });
+                if (ImGui::Button("Remove Obstacle"))
+                    world.obstacles.pop_back();
+                for (size_t i = 0; i < world.obstacles.size(); i++)
+                    ImGui::SliderFloat3(string("Obstacle " + to_string(i + 1)).c_str(),
+                        (float*)&world.obstacles[i], 0.0f, 1200.0f);
+            }
+            
             rlImGuiEnd();
         }
 
@@ -447,8 +544,19 @@ DRAW:
     rlImGuiShutdown();
     CloseWindow();
 
+    UnloadTexture(galaxyTex);
+    UnloadTexture(nebulaTex);
+    UnloadTexture(enemyTex);
+    UnloadTexture(playerTex);
+    
+    UnloadSound(playerAttackSound);
     UnloadSound(rceAttackSound);
     UnloadSound(cceAttackSound);
+    UnloadSound(enemyHitSound);
+    UnloadSound(playerHitSound);
+    UnloadSound(playerDeathSound);
+    UnloadSound(enemyDeath2Sound);
+    UnloadSound(enemyDeath1Sound);
     CloseAudioDevice();
 
     return 0;
