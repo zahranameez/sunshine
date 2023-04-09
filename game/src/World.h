@@ -49,6 +49,12 @@ struct Player : public Entity
 struct Projectile : public Entity
 {
     float damage = 0.0f;
+    enum Type
+    {
+        NONE,
+        ENEMY,
+        PLAYER
+    } type = NONE;
 };
 
 using Projectiles = std::vector<Projectile>;

@@ -9,6 +9,13 @@
 
 using namespace std;
 
+enum Screen
+{
+    WIN,
+    LOSE,
+    GAME
+};
+
 Vector2 Avoid(const Rigidbody& rb, float probeLength, float dt, const Obstacles& obstacles)
 {
     // Test obstacles against probe
@@ -49,6 +56,11 @@ bool ResolveCollisions(Entity& entity, const Obstacles& obstacles)
             return true;
         }
     }
+
+    if (entity.pos.x < 0.0f) entity.pos.x = 0.0f;
+    if (entity.pos.y < 0.0f) entity.pos.y = 0.0f;
+    if (entity.pos.x > SCREEN_WIDTH) entity.pos.x = SCREEN_WIDTH;
+    if (entity.pos.y > SCREEN_HEIGHT) entity.pos.y = SCREEN_HEIGHT;
     return false;
 }
 
@@ -77,19 +89,15 @@ int main(void)
     rlImGuiSetup(true);
     SetTargetFPS(60);
 
-    Sound shotgunSound = LoadSound("../game/assets/audio/shotgun.wav");
-    Sound sniperSound = LoadSound("../game/assets/audio/sniper.wav");
-    SetSoundVolume(shotgunSound, 0.25f);
+    Sound cceAttackSound = LoadSound("../game/assets/audio/shotgun.wav");
+    Sound rceAttackSound = LoadSound("../game/assets/audio/sniper.wav");
+    Sound playerAttackSound = LoadSound("../game/assets/audio/rifle.wav");
+    SetSoundVolume(cceAttackSound, 0.5f);
+    SetSoundVolume(playerAttackSound, 0.5f);
 
     World world;
     world.obstacles = LoadObstacles();
     world.points = LoadPoints();
-
-    Player player;
-    player.radius = 60.0f;
-    player.dir = { 1.0f, 0.0f };
-    player.angularSpeed = 100.0f;
-    player.name = "Player";
 
     Enemy cce;
     cce.pos = { 1000.0f, 250.0f };
@@ -124,7 +132,7 @@ int main(void)
     PatrolAction ccePatrol(cce);
     FindVisibilityAction cceFindVisibility(cce, &ccePatrol);
     ArriveAction cceArrive(cce);
-    CloseAttackAction cceAttack(cce, &cceArrive, &shotgunSound);
+    CloseAttackAction cceAttack(cce, &cceArrive, &cceAttackSound);
 
     // CCE tree
     Node* cceRoot = &cceIsPlayerDetected;
@@ -144,7 +152,7 @@ int main(void)
     PatrolAction rcePatrol(rce);
     FindVisibilityAction rceFindVisibility(rce, &rcePatrol);
     FleeAction rceFlee(rce);
-    RangedAttackAction rceAttack (rce, &rcePatrol, &sniperSound);
+    RangedAttackAction rceAttack (rce, &rcePatrol, &rceAttackSound);
 
     // Need something like an interrupt if I'm to implement something like this elegantly...
     // Interrupt would have to tick previous state timer while not relinquishing control until current condition is met.
@@ -160,6 +168,18 @@ int main(void)
     rceIsPlayerCombat.no = &rceFlee;
     rceIsPlayerCombat.yes = &rceAttack;
 
+    Player player;
+    player.pos = { SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f };
+    player.radius = 60.0f;
+    player.dir = { 1.0f, 0.0f };
+    player.angularSpeed = 250.0f;
+    player.name = "Player";
+    const float playerSpeed = 500.0f;
+
+    Timer playerAttackTimer;
+    playerAttackTimer.duration = 0.20f;
+    playerAttackTimer.elapsed = playerAttackTimer.duration;
+
     const Color background = RAYWHITE;
     const Color playerColor = { 0, 228, 48, 128 };          // GREEN
 
@@ -171,21 +191,50 @@ int main(void)
     const Color rceOverlapColor = { 200, 122, 255, 128 };   // PURPLE
     const Color rceVisibleColor = { 255, 0, 255, 128 };     // MAGENTA
 
-    bool useDebug = true;
+    Screen screen = Screen::GAME;
+
     bool useGUI = false;
+    bool useDebug = false;
     bool showPoints = false;
     while (!WindowShouldClose())
     {
+        // First goto statement in 7 years (2016 when I started uni). Legitimately clearner than wrapping update in if :'D
+        if (screen != Screen::GAME)
+            goto DRAW;
+
         const float dt = GetFrameTime();
+        const float playerPositionDelta = playerSpeed * dt;
+        const float playerRotationDelta = player.angularSpeed * dt * DEG2RAD;
+        player.dir = RotateTowards(player.dir, Normalize(GetMousePosition() - player.pos), playerRotationDelta);
+        playerAttackTimer.Tick(dt);
 
         // Update player information
-        if (IsKeyDown(KEY_E))
-            player.dir = Rotate(player.dir, player.angularSpeed * dt * DEG2RAD);
-        if (IsKeyDown(KEY_Q))
-            player.dir = Rotate(player.dir, -player.angularSpeed * dt * DEG2RAD);
+        if (IsKeyDown(KEY_W))
+            player.pos = player.pos + player.dir * playerPositionDelta;
+        if (IsKeyDown(KEY_S))
+            player.pos = player.pos - player.dir * playerPositionDelta;
+        if (IsKeyDown(KEY_D))
+            player.pos = player.pos + Rotate(player.dir, 90.0f * DEG2RAD) * playerPositionDelta;
+        if (IsKeyDown(KEY_A))
+            player.pos = player.pos - Rotate(player.dir, 90.0f * DEG2RAD) * playerPositionDelta;
+        if (IsKeyDown(KEY_SPACE))
+        {
+            if (playerAttackTimer.Expired())
+            {
+                playerAttackTimer.Reset();
+                PlaySound(playerAttackSound);
 
-        player.pos = GetMousePosition();
-        const Vector2 playerEnd = player.pos + player.dir * 500.0f;
+                Projectile projectile;
+                projectile.type = Projectile::PLAYER;
+                projectile.dir = Rotate(player.dir, Random(-10.0f, 10.0f) * DEG2RAD);
+                projectile.radius = 20.0f;
+                projectile.pos = player.pos + projectile.dir * (player.radius + projectile.radius);
+                projectile.vel = projectile.dir * 500.0f;
+                projectile.acc = projectile.dir * 1000.0f;
+                projectile.damage = 5.0f;
+                world.projectiles.push_back(std::move(projectile));
+            }
+        }
 
         Traverse(cceRoot, player, world);
         cce.acc = cce.acc + Avoid(cce, cce.probeLength, dt, world.obstacles);
@@ -200,11 +249,26 @@ int main(void)
 
         world.projectiles.erase(
             remove_if(world.projectiles.begin(), world.projectiles.end(),
-                [&player, &world](const Projectile& projectile) -> bool
+                [&player, &cce, &rce, &world](const Projectile& projectile) -> bool
                 {
                     if (CheckCollisionCircles(player.Collider(), projectile.Collider()))
                     {
-                        player.health -= projectile.damage;
+                        if (projectile.type == Projectile::ENEMY)
+                            player.health -= projectile.damage;
+                        return true;
+                    }
+
+                    if (CheckCollisionCircles(cce.Collider(), projectile.Collider()))
+                    {
+                        if (projectile.type == Projectile::PLAYER)
+                            cce.health -= projectile.damage;
+                        return true;
+                    }
+
+                    if (CheckCollisionCircles(rce.Collider(), projectile.Collider()))
+                    {
+                        if (projectile.type == Projectile::PLAYER)
+                            rce.health -= projectile.damage;
                         return true;
                     }
 
@@ -218,10 +282,12 @@ int main(void)
                 }
             ),
         world.projectiles.end());
-
-        bool playerCollision = ResolveCollisions(player, world.obstacles);
+        
+DRAW:
         bool cceCollision = ResolveCollisions(cce, world.obstacles);
         bool rceCollision = ResolveCollisions(rce, world.obstacles);
+        bool playerCollision = ResolveCollisions(player, world.obstacles);
+        const Vector2 playerEnd = player.pos + player.dir * 500.0f;
 
         vector<Vector2> intersections;
         for (const Circle& obstacle : world.obstacles)
@@ -232,26 +298,25 @@ int main(void)
         }
         bool playerIntersection = !intersections.empty();
 
+        if (player.health <= 0.0f) screen = Screen::LOSE;
+        else if (cce.health <= 0.0f && rce.health <= 0.0f) screen = Screen::WIN;
+
         BeginDrawing();
         ClearBackground(background);
 
-        // Cheap implementation of game screens (note that the update code is still running)
-        auto endScreen = [](const char* message, Color background, Color foreground)
+        if (screen != Screen::GAME)
         {
-            DrawRectangleRec(SCREEN_REC, background);
-            CenterText(message, SCREEN_REC, 30, foreground);
+            if (screen == Screen::WIN)
+            {
+                DrawRectangleRec(SCREEN_REC, GREEN);
+                CenterText("You win :)", SCREEN_REC, 30, WHITE);
+            }
+            else
+            {
+                DrawRectangleRec(SCREEN_REC, RED);
+                CenterText("You lose :(", SCREEN_REC, 30, BLACK);
+            }
             EndDrawing();
-        };
-
-        if (player.health <= 0.0f)
-        {
-            endScreen("You lost :(", RED, BLACK);
-            continue;
-        }
-
-        if (cce.health <= 0.0f && rce.health <= 0.0f)
-        {
-            endScreen("You won :)", GREEN, WHITE);
             continue;
         }
 
@@ -283,7 +348,7 @@ int main(void)
         DrawLineEx(rce.pos, rce.pos + rce.dir * rce.detectionRadius, 10.0f, rceColor);
         DrawLineEx(player.pos, playerEnd, 10.0f, playerIntersection ? RED : playerColor);
         for (const Projectile& projectile : world.projectiles)
-            DrawCircleV(projectile.pos, projectile.radius, RED);
+            DrawCircleV(projectile.pos, projectile.radius, projectile.type == Projectile::ENEMY ? RED : GREEN);
 
         // Health bars
         RenderHealthBar(cce);
@@ -323,7 +388,7 @@ int main(void)
         if (useGUI)
         {
             rlImGuiBegin();
-            ImGui::Checkbox("Use heatmap", &useDebug);
+            ImGui::Checkbox("Use debug", &useDebug);
             ImGui::SliderFloat2("CCE Position", (float*)&cce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat2("RCE Position", (float*)&rce.pos, 0.0f, 1200.0f);
             ImGui::SliderFloat("CCE Detection Radius", &cce.detectionRadius, 0.0f, 1500.0f);
@@ -363,8 +428,8 @@ int main(void)
     rlImGuiShutdown();
     CloseWindow();
 
-    UnloadSound(sniperSound);
-    UnloadSound(shotgunSound);
+    UnloadSound(rceAttackSound);
+    UnloadSound(cceAttackSound);
     CloseAudioDevice();
 
     return 0;

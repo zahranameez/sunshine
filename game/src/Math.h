@@ -1,5 +1,6 @@
 #pragma once
 #include <corecrt_math.h>
+#include <cstdlib>
 
 //----------------------------------------------------------------------------------
 // Defines and Macros
@@ -94,6 +95,12 @@ typedef struct float16 {
 //----------------------------------------------------------------------------------
 // Module Functions Definition - Utils math
 //----------------------------------------------------------------------------------
+
+// Random value between min and max (can be negative)
+RMAPI inline float Random(float min, float max)
+{
+    return min + (rand() / ((float)RAND_MAX / (max - min)));
+}
 
 // Clamp float value
 RMAPI float Clamp(float value, float min, float max)

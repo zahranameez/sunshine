@@ -190,6 +190,7 @@ Node* CloseAttackAction::Evaluate(const Entity& entity, World& world)
         Projectile right;
         Projectile left;
 
+        left.type = right.type = center.type = Projectile::ENEMY;
         left.radius = right.radius = center.radius = 10.0f;
         left.damage = right.damage = center.damage = 5.0f;
         
@@ -228,6 +229,7 @@ Node* RangedAttackAction::Evaluate(const Entity& entity, World& world)
             PlaySound(*mSound);
 
         Projectile projectile;
+        projectile.type = Projectile::ENEMY;
         projectile.dir = Normalize(entity.pos - mSelf.pos);
         projectile.radius = 50.0f;
         projectile.pos = mSelf.pos + projectile.dir * (mSelf.radius + projectile.radius);
