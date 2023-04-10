@@ -11,6 +11,30 @@ struct Circle
     float radius;
 };
 
+bool CheckCollisionCircles(Circle circle1, Circle circle2)
+{
+    Vector2 delta = circle2.position - circle1.position;
+    float radiiSum = circle1.radius + circle2.radius;
+    return Length(delta) <= radiiSum;
+}
+
+// Mtv resolves circle2 from circle1
+bool CheckCollisionCircles(Circle circle1, Circle circle2,
+    Vector2& mtv)
+{
+    Vector2 delta = circle2.position - circle1.position;
+    float radiiSum = circle1.radius + circle2.radius;
+    float centerDistance = Length(delta);
+    bool collision = centerDistance <= radiiSum;
+    if (collision)
+    {
+        // Compute mtv (sum of radii - distance between centers)
+        float mtvDistance = radiiSum - centerDistance;
+        mtv = Normalize(delta) * mtvDistance;
+    }
+    return collision;
+}
+
 bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
 {
     Vector2 nearest = NearestPoint(lineStart, lineEnd, circle.position);
