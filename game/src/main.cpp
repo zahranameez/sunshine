@@ -4,8 +4,9 @@
 
 using namespace std;
 
-// Angle between two normalized vectors as you'd imagine it... 
-// Angle and LineAngle are silly
+// Angle between two normalized vectors
+// We want to use directions instead of angles to represent rotations
+// because angles can exceed the range of [0, 360] which may cause problems!
 RMAPI float SignedAngle(Vector2 from, Vector2 to)
 {
     float angle = LineAngle(from, to);
@@ -35,10 +36,6 @@ void DrawCapsule(Capsule capsule, Color color)
     
     DrawRectanglePro(rec, { capsule.radius, capsule.halfHeight },
         SignedAngle({ 1.0, 0.0f }, capsule.direction) * RAD2DEG, color);
-
-    // TODO -- fill in with rectangle
-    //Rectangle rec{}
-    //DrawRectanglePro()
 }
 
 int main(void)
