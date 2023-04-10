@@ -33,7 +33,7 @@ int main(void)
     InitWindow(screenWidth, screenHeight, "Sunshine");
 
     Capsule test{ {500.0f, 500.0f}, {1.0f, 0.0f}, 50.0f, 50.0f };
-    Circle player{ {0.0f, 0.0f}, 50.0f };
+    Capsule player{ {0.0f, 0.0f}, {1.0f, 0.0f}, 50.0f, 50.0f };
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -41,13 +41,13 @@ int main(void)
         player.position = GetMousePosition();
 
         Vector2 mtv;
-        bool collision = false;// CheckCollisionCircles(player, test, mtv);
+        bool collision = CheckCollisionCapsules(player, test, mtv);
         Color color = collision ? RED : GREEN;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
         DrawCapsule(test, color);
-        DrawCircleV(player.position, 50.0f, color);
+        DrawCapsule(player, color);
 
         if (collision)
         {

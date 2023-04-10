@@ -19,29 +19,6 @@ struct Capsule
     float halfHeight;
 };
 
-void NearestCapsulePoints(Capsule capsule1, Capsule capsule2, Vector2& nearest1, Vector2& nearest2)
-{
-    Vector2 top1 = capsule1.position + capsule1.direction * capsule1.halfHeight;
-    Vector2 top2 = capsule2.position + capsule2.direction * capsule2.halfHeight;
-    Vector2 bot1 = capsule1.position - capsule1.direction * capsule1.halfHeight;
-    Vector2 bot2 = capsule2.position - capsule2.direction * capsule2.halfHeight;
-
-    std::array<Vector2, 4> lines
-    {
-        top2 - top1,
-        bot2 - top1,
-        top2 - bot1,
-        bot2 - bot1,
-    };
-
-    size_t min = 0;
-    for (size_t i = 1; i < lines.size(); i++)
-    {
-        if (LengthSqr(lines[i]) < LengthSqr(lines[min]))
-            min = i;
-    }
-}
-
 bool CheckCollisionCircles(Circle circle1, Circle circle2)
 {
     Vector2 delta = circle2.position - circle1.position;
@@ -64,6 +41,48 @@ bool CheckCollisionCircles(Circle circle1, Circle circle2,
         mtv = Normalize(delta) * mtvDistance;
     }
     return collision;
+}
+
+// Projects point P along line AB
+Vector2 Project(Vector2 a, Vector2 b, Vector2 p)
+{
+    Vector2 AB = b - a;
+    float t = Dot((p - a), AB) / LengthSqr(AB);
+    return a + AB * std::min(std::max(t, 0.0f), 1.0f);
+}
+
+void NearestCirclePoints(Capsule capsule1, Capsule capsule2, Vector2& nearest1, Vector2& nearest2)
+{
+    Vector2 top1 = capsule1.position + capsule1.direction * capsule1.halfHeight;
+    Vector2 top2 = capsule2.position + capsule2.direction * capsule2.halfHeight;
+    Vector2 bot1 = capsule1.position - capsule1.direction * capsule1.halfHeight;
+    Vector2 bot2 = capsule2.position - capsule2.direction * capsule2.halfHeight;
+
+    std::array<Vector2, 4> lines
+    {
+        top2 - top1,
+        bot2 - top1,
+        top2 - bot1,
+        bot2 - bot1,
+    };
+
+    size_t min = 0;
+    for (size_t i = 1; i < lines.size(); i++)
+    {
+        if (LengthSqr(lines[i]) < LengthSqr(lines[min]))
+            min = i;
+    }
+
+    nearest1 = min < 2 ? top1 : bot1;
+    nearest2 = Project(bot2, top2, nearest1);
+    nearest1 = Project(bot1, top1, nearest2);
+}
+
+bool CheckCollisionCapsules(Capsule capsule1, Capsule capsule2, Vector2& mtv)
+{
+    Vector2 nearest1, nearest2;
+    NearestCirclePoints(capsule1, capsule2, nearest1, nearest2);
+    return CheckCollisionCircles({ nearest1, capsule1.radius }, { nearest2, capsule2.radius }, mtv);
 }
 
 bool CheckCollisionLineCircle(Vector2 lineStart, Vector2 lineEnd, Circle circle)
