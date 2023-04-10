@@ -4,33 +4,54 @@
 
 using namespace std;
 
+void DrawCapsule(Capsule capsule, Color color)
+{
+    Vector2 top = capsule.position + capsule.direction * capsule.halfHeight;
+    Vector2 bot = capsule.position - capsule.direction * capsule.halfHeight;
+    DrawCircleV(top, capsule.radius, color);
+    DrawCircleV(bot, capsule.radius, color);
+
+    // Render edges
+    Vector2 perp{ capsule.direction.y, capsule.direction.x };
+
+    Vector2 leftStart = bot + perp * capsule.radius;
+    Vector2 leftEnd = leftStart + capsule.direction * capsule.halfHeight * 2.0f;
+    Vector2 rightStart = bot - perp * capsule.radius;
+    Vector2 rightEnd = rightStart + capsule.direction * capsule.halfHeight * 2.0f;
+    DrawLineEx(leftStart, leftEnd, 5.0f, color);
+    DrawLineEx(rightStart, rightEnd, 5.0f, color);
+
+    //Rectangle rec{}
+    //DrawRectanglePro()
+}
+
 int main(void)
 {
     const int screenWidth = 1280;
     const int screenHeight = 720;
     InitWindow(screenWidth, screenHeight, "Sunshine");
 
-    Circle testCircle{ {500.0f, 500.0f}, 50.0f };
-    Circle playerCircle{ {0.0f, 0.0f}, 50.0f };
+    Capsule test{ {500.0f, 500.0f}, {1.0f, 0.0f}, 50.0f, 50.0f };
+    Circle player{ {0.0f, 0.0f}, 50.0f };
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
-        playerCircle.position = GetMousePosition();
+        player.position = GetMousePosition();
 
         Vector2 mtv;
-        bool circleCollision = CheckCollisionCircles(playerCircle, testCircle, mtv);
-        Color circleColor = circleCollision ? RED : GREEN;
+        bool collision = false;// CheckCollisionCircles(player, test, mtv);
+        Color color = collision ? RED : GREEN;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        DrawCircleV(playerCircle.position, 50.0f, circleColor);
-        DrawCircleV(testCircle.position, 50.0f, circleColor);
+        DrawCapsule(test, color);
+        DrawCircleV(player.position, 50.0f, color);
 
-        if (circleCollision)
+        if (collision)
         {
-            DrawLineEx(playerCircle.position, playerCircle.position + mtv, 5, BLACK);
-            testCircle.position = testCircle.position + mtv;
+            DrawLineEx(player.position, player.position + mtv, 5, BLACK);
+            test.position = test.position + mtv;
         }
 
         EndDrawing();

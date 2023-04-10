@@ -11,6 +11,14 @@ struct Circle
     float radius;
 };
 
+struct Capsule
+{
+    Vector2 position;
+    Vector2 direction;
+    float radius;
+    float halfHeight;
+};
+
 bool CheckCollisionCircles(Circle circle1, Circle circle2)
 {
     Vector2 delta = circle2.position - circle1.position;
