@@ -21,6 +21,7 @@ void DrawCapsule(Capsule capsule, Color color)
     DrawLineEx(leftStart, leftEnd, 5.0f, color);
     DrawLineEx(rightStart, rightEnd, 5.0f, color);
 
+    // TODO -- fill in with rectangle
     //Rectangle rec{}
     //DrawRectanglePro()
 }

@@ -19,6 +19,29 @@ struct Capsule
     float halfHeight;
 };
 
+void NearestCapsulePoints(Capsule capsule1, Capsule capsule2, Vector2& nearest1, Vector2& nearest2)
+{
+    Vector2 top1 = capsule1.position + capsule1.direction * capsule1.halfHeight;
+    Vector2 top2 = capsule2.position + capsule2.direction * capsule2.halfHeight;
+    Vector2 bot1 = capsule1.position - capsule1.direction * capsule1.halfHeight;
+    Vector2 bot2 = capsule2.position - capsule2.direction * capsule2.halfHeight;
+
+    std::array<Vector2, 4> lines
+    {
+        top2 - top1,
+        bot2 - top1,
+        top2 - bot1,
+        bot2 - bot1,
+    };
+
+    size_t min = 0;
+    for (size_t i = 1; i < lines.size(); i++)
+    {
+        if (LengthSqr(lines[i]) < LengthSqr(lines[min]))
+            min = i;
+    }
+}
+
 bool CheckCollisionCircles(Circle circle1, Circle circle2)
 {
     Vector2 delta = circle2.position - circle1.position;
