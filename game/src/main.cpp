@@ -12,7 +12,7 @@ void DrawCapsule(Capsule capsule, Color color)
     DrawCircleV(bot, capsule.radius, color);
 
     // Render edges
-    Vector2 perp{ capsule.direction.y, capsule.direction.x };
+    Vector2 perp{ capsule.direction.y, -capsule.direction.x };
 
     Vector2 leftStart = bot + perp * capsule.radius;
     Vector2 leftEnd = leftStart + capsule.direction * capsule.halfHeight * 2.0f;
