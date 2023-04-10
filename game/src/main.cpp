@@ -44,14 +44,12 @@ int main(void)
         bool collision = CheckCollisionCapsules(player, test, mtv);
         Color color = collision ? RED : GREEN;
 
-        //float angularSpeed = 100.0f; // 100 radians per frame
-        float angularSpeed = 100.0f * GetFrameTime(); // 100 radians per second
-        printf("%f\n", GetFrameTime());
+        float angularSpeed = 100.0f * GetFrameTime(); // 100 degrees per second
 
         if (IsKeyDown(KEY_Q))
-            player.direction = Rotate(player.direction, -angularSpeed);
+            player.direction = Rotate(player.direction, -angularSpeed * DEG2RAD);
         if (IsKeyDown(KEY_E))
-            player.direction = Rotate(player.direction, angularSpeed);
+            player.direction = Rotate(player.direction, angularSpeed * DEG2RAD);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
