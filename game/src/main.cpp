@@ -4,6 +4,15 @@
 
 using namespace std;
 
+// Angle between two normalized vectors as you'd imagine it... 
+// Angle and LineAngle are silly
+RMAPI float SignedAngle(Vector2 from, Vector2 to)
+{
+    float angle = LineAngle(from, to);
+    float sign = (from.x * to.y - from.y * to.x) < 0.0f ? -1.0f : 1.0f;
+    return angle * sign;
+}
+
 void DrawCapsule(Capsule capsule, Color color)
 {
     Vector2 top = capsule.position + capsule.direction * capsule.halfHeight;
@@ -20,6 +29,12 @@ void DrawCapsule(Capsule capsule, Color color)
     Vector2 rightEnd = rightStart + capsule.direction * capsule.halfHeight * 2.0f;
     DrawLineEx(leftStart, leftEnd, 5.0f, color);
     DrawLineEx(rightStart, rightEnd, 5.0f, color);
+
+    Rectangle rec{ capsule.position.x, capsule.position.y,
+    capsule.radius * 2.0f, capsule.halfHeight * 2.0f };
+    
+    DrawRectanglePro(rec, { capsule.radius, capsule.halfHeight },
+        SignedAngle({ 1.0, 0.0f }, capsule.direction) * RAD2DEG, color);
 
     // TODO -- fill in with rectangle
     //Rectangle rec{}
