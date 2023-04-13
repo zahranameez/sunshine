@@ -14,6 +14,15 @@ struct Projectile
     float speed = 0.0f;
 };
 
+struct Timer
+{
+    float elapsed = 0.0f;
+    float duration = 0.0f;
+    bool Expired() { return elapsed >= duration; }
+    void Reset() { elapsed = 0.0f; }
+    void Tick(float dt) { elapsed += dt; }
+};
+
 int main(void)
 {
     const int screenWidth = 1280;
@@ -37,6 +46,8 @@ int main(void)
     Vector2 playerDirection{};
 
     std::vector<Projectile> projectiles;
+    Timer projectileTimer;
+    projectileTimer.duration = 0.25f;
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -48,13 +59,19 @@ int main(void)
             playerRotation += playerRotationSpeed * dt;
         if (IsKeyDown(KEY_SPACE))
         {
-            Projectile projectile;
-            projectile.position = playerPosition;
-            projectile.direction = playerDirection;
-            projectile.speed = 100.0f;
-            projectile.velocity = projectile.direction * projectile.speed;
-            projectiles.push_back(projectile);
+            if (projectileTimer.Expired())
+            {
+                projectileTimer.Reset();
+                Projectile projectile;
+                projectile.position = playerPosition;
+                projectile.direction = playerDirection;
+                projectile.speed = 100.0f;
+                projectile.velocity = projectile.direction * projectile.speed;
+                projectiles.push_back(projectile);
+            }
         }
+
+        projectileTimer.Tick(dt);
 
         playerPosition = GetMousePosition();
         playerDirection = Direction(playerRotation * DEG2RAD);
