@@ -5,6 +5,15 @@
 
 using namespace std;
 
+struct Projectile
+{
+    Vector2 position{};
+    Vector2 direction{};
+
+    Vector2 velocity{};
+    float speed = 0.0f;
+};
+
 int main(void)
 {
     const int screenWidth = 1280;
@@ -27,11 +36,7 @@ int main(void)
     Vector2 playerPosition{};
     Vector2 playerDirection{};
 
-    Vector2 projectilePosition{ -100.0f, 0.0f };
-    Vector2 projectileDirection{};
-    
-    Vector2 projectileVelocity{};
-    float projectileSpeed = 100.0f;     // 100 pixels per second
+    std::vector<Projectile> projectiles;
 
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -43,14 +48,19 @@ int main(void)
             playerRotation += playerRotationSpeed * dt;
         if (IsKeyDown(KEY_SPACE))
         {
-            projectilePosition = playerPosition;
-            projectileDirection = playerDirection;
-            projectileVelocity = projectileDirection * projectileSpeed;
+            Projectile projectile;
+            projectile.position = playerPosition;
+            projectile.direction = playerDirection;
+            projectile.speed = 100.0f;
+            projectile.velocity = projectile.direction * projectile.speed;
+            projectiles.push_back(projectile);
         }
 
         playerPosition = GetMousePosition();
         playerDirection = Direction(playerRotation * DEG2RAD);
-        projectilePosition = projectilePosition + projectileVelocity * dt;
+
+        for (int i = 0; i < projectiles.size(); i++)
+            projectiles[i].position = projectiles[i].position + projectiles[i].velocity * dt;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
@@ -58,22 +68,26 @@ int main(void)
         DrawRectanglePro({ playerPosition.x, playerPosition.y, recWidth, recHeight },
             { recWidth * 0.5f, recHeight * 0.5f }, playerRotation, BLUE);
 
-        const float projectileRotation = SignedAngle(originDirection, projectileDirection) * RAD2DEG;
-        DrawRectanglePro({ projectilePosition.x, projectilePosition.y, recWidth, recHeight },
-            { recWidth * 0.5f, recHeight * 0.5f }, projectileRotation, ORANGE);
+        for (int i = 0; i < projectiles.size(); i++)
+        {
+            const Projectile& projectile = projectiles[i];
+            const float projectileRotation = SignedAngle(originDirection, projectile.direction) * RAD2DEG;
+            DrawRectanglePro({ projectile.position.x, projectile.position.y, recWidth, recHeight },
+                { recWidth * 0.5f, recHeight * 0.5f }, projectileRotation, ORANGE);
+        }
 
         //DrawRectangle(0, 0, recWidth, recHeight, RED);
         DrawRectangle(screenWidth - recWidth, 0, recWidth, recHeight, ORANGE);
         DrawRectangle(0, screenHeight - recHeight, recWidth, recHeight, YELLOW);
         DrawRectangle(screenWidth - recWidth, screenHeight - recHeight, recWidth, recHeight, GREEN);
         DrawLineV(playerPosition, playerPosition + playerDirection * playerDistance, BLUE);
-        
+
         string angle = "Angle: " + to_string(fmodf(fabs(playerRotation + 360.0f), 360.0f));
         string dir = "Direction: [" + to_string(playerDirection.x) + ", " +
             to_string(playerDirection.y) + "]";
         DrawText(angle.c_str(), 10, 10, fontSize, RED);
         DrawText(dir.c_str(), 10, 10 + fontSize, fontSize, RED);
-        
+
         EndDrawing();
     }
 
