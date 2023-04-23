@@ -6,6 +6,14 @@
 
 using namespace std;
 
+void DrawTextureCircle(const Texture& texture, const Circle& circle,
+float rotation/*degrees*/ = 0.0f, Color tint = WHITE)
+{
+    Rectangle src{ 0.0f, 0.0f, texture.width, texture.height };
+    Rectangle dst{ circle.position.x, circle.position.y, circle.radius * 2.0f, circle.radius * 2.0f };
+    DrawTexturePro(texture, src, dst, { dst.width * 0.5f, dst.height * 0.5f }, rotation, tint);
+}
+
 int main(void)
 {
     InitWindow(1280, 720, "Sunshine");
@@ -16,6 +24,10 @@ int main(void)
     Music music = LoadMusicStream("../game/assets/audio/ncs_time_leap_aero_chord.mp3");
     bool musicPaused = true;
 
+    Texture texObstacle = LoadTexture("../game/assets/textures/nebula.png");
+    Obstacles obstacles = LoadObstacles();
+
+    bool drawColliders = true;
     bool useGUI = false;
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -30,10 +42,18 @@ int main(void)
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
+        for (const Circle& obstacle : obstacles)
+        {
+            if (drawColliders)
+                DrawCircleV(obstacle.position, obstacle.radius, GRAY);
+            DrawTextureCircle(texObstacle, obstacle);
+        }
+
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
         if (useGUI)
         {
             rlImGuiBegin();
+            ImGui::Checkbox("Draw Colliders", &drawColliders);
 
             if (ImGui::Button("Play Sound"))
                 PlaySound(sound);
