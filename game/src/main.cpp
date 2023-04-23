@@ -9,13 +9,24 @@ using namespace std;
 int main(void)
 {
     InitWindow(1280, 720, "Sunshine");
-    InitAudioDevice();
     rlImGuiSetup(true);
+    InitAudioDevice();
+
+    Sound sound = LoadSound("../game/assets/audio/yay.ogg");
+    Music music = LoadMusicStream("../game/assets/audio/ncs_time_leap_aero_chord.mp3");
+    bool musicPaused = true;
 
     bool useGUI = false;
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
+        UpdateMusicStream(music);
+
+        if (musicPaused)
+            PauseMusicStream(music);
+        else
+            PlayMusicStream(music);
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
@@ -23,8 +34,24 @@ int main(void)
         if (useGUI)
         {
             rlImGuiBegin();
-            if (ImGui::Button("Click Me"))
-                cout << "Thank you ever so much for clicking me. I am forever in your debt!" << endl;
+
+            if (ImGui::Button("Play Sound"))
+                PlaySound(sound);
+
+            if (musicPaused)
+            {
+                if (ImGui::Button("Play Music"))
+                    musicPaused = false;
+            }
+            else
+            {
+                if (ImGui::Button("Pause Music"))
+                    musicPaused = true;
+            }
+
+            if (ImGui::Button("Restart Music"))
+                SeekMusicStream(music, 0.0f);
+
             rlImGuiEnd();
         }
 
@@ -32,8 +59,11 @@ int main(void)
         EndDrawing();
     }
 
-    rlImGuiShutdown();
+    UnloadSound(sound);
+    UnloadMusicStream(music);
+
     CloseAudioDevice();
+    rlImGuiShutdown();
     CloseWindow();
 
     return 0;
