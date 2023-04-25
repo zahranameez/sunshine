@@ -129,6 +129,7 @@ int main(void)
     playerAttackCooldown.duration = 0.25f;
 
     bool drawColliders = false;
+    bool drawPoints = false;
     bool useGUI = false;
     SetTargetFPS(60);
     while (!WindowShouldClose())
@@ -224,6 +225,12 @@ int main(void)
             DrawCircleV(enemy.position, enemy.radius, RED);
         }
 
+        if (drawPoints)
+        {
+            for (size_t i = 0; i < points.size(); i++)
+                DrawLineV(points[i], points[(i + 1) % points.size()], i == point ? GREEN : RED);
+        }
+
         for (const Circle& obstacle : obstacles)
             DrawTextureCircle(texObstacle, obstacle);
         DrawTextureCircle(texPlayer, player, SignedAngle({1.0f, 0.0f}, playerDirection) * RAD2DEG);
@@ -239,6 +246,7 @@ int main(void)
         {
             rlImGuiBegin();
             ImGui::Checkbox("Draw Colliders", &drawColliders);
+            ImGui::Checkbox("Draw Points", &drawPoints);
 
             if (ImGui::Button("Play Sound"))
                 PlaySound(test);
