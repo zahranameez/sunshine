@@ -4,6 +4,7 @@
 #include "Timer.h"
 
 #include <iostream>
+#include <string>
 using namespace std;
 
 #define SCREEN_WIDTH 1280
@@ -41,9 +42,40 @@ struct Bullet : Circle
     Vector2 direction{};
 };
 
-void Move(Bullet& bullet, float bulletSpeed, float dt)
+using Bullets = vector<Bullet>;
+
+void Move(Bullets& bullets, float bulletSpeed, float dt)
 {
-    bullet.position = bullet.position + bullet.direction * bulletSpeed * dt;
+    for (Bullet& bullet : bullets)
+        bullet.position = bullet.position + bullet.direction * bulletSpeed * dt;
+}
+
+void Prune(Bullets& bullets, const Circle& target, const Obstacles& obstacles,
+    const Sound& impact, const Sound& damage, int& score, bool isTargetEnemy/*gameplay score hack*/)
+{
+    bullets.erase(
+        remove_if(bullets.begin(), bullets.end(), [&](const Bullet& bullet)
+        {
+            if (CheckCollisionCircles(target, bullet))
+            {
+                score = isTargetEnemy ? score + 1 : score - 1;
+                PlaySound(damage);
+                return true;
+            }
+
+            for (const Circle& obstacle : obstacles)
+            {
+                if (CheckCollisionCircles(obstacle, bullet))
+                {
+                    PlaySound(impact);
+                    return true;
+                }
+            }
+
+            return
+                !CheckCollisionPointRec(bullet.position, { 0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT });
+        }),
+    bullets.end());
 }
 
 int main(void)
@@ -52,9 +84,18 @@ int main(void)
     rlImGuiSetup(true);
     InitAudioDevice();
 
-    Sound sound = LoadSound("../game/assets/audio/yay.ogg");
+    bool musicPaused = false;
     Music music = LoadMusicStream("../game/assets/audio/ncs_time_leap_aero_chord.mp3");
-    bool musicPaused = true;
+    Sound test = LoadSound("../game/assets/audio/yay.ogg");
+    Sound playerFire = LoadSound("../game/assets/audio/rifle.wav");
+    Sound enemyFire = LoadSound("../game/assets/audio/shotgun.wav");
+    Sound impact = LoadSound("../game/assets/audio/impact.wav");
+    Sound damage = LoadSound("../game/assets/audio/damage.wav");
+    SetMusicVolume(music, 0.30f);
+    SetSoundVolume(playerFire, 0.15f);
+    SetSoundVolume(enemyFire, 0.15f);
+    SetSoundVolume(impact, 0.10f);
+    SetSoundVolume(damage, 0.20f);
 
     Texture texBackground = LoadTexture("../game/assets/textures/galaxy.png");
     Texture texObstacle = LoadTexture("../game/assets/textures/nebula.png");
@@ -64,10 +105,11 @@ int main(void)
     Points points = LoadPoints();
     Obstacles obstacles = LoadObstacles();
     
+    int score = 0;
     Circle player{ {}, 50.0f };
     Circle enemy{ {}, 50.0f };
-    vector<Bullet> playerBullets;
-    vector<Bullet> enemyBullets;
+    Bullets playerBullets;
+    Bullets enemyBullets;
     const float bulletRadius = 10.0f;
     const float bulletSpeed = 500.0f;
 
@@ -115,6 +157,7 @@ int main(void)
                 bullet.direction = playerDirection;
                 bullet.position = player.position + playerDirection * (player.radius + bullet.radius);
                 playerBullets.push_back(bullet);
+                PlaySound(playerFire);
             }
         }
 
@@ -139,6 +182,7 @@ int main(void)
                 bullet.direction = Rotate(enemyDirection, Random(-10.0f, 10.0f) * DEG2RAD);
                 bullet.position = enemy.position + enemyDirection * (enemy.radius + bullet.radius);
                 enemyBullets.push_back(bullet);
+                PlaySound(enemyFire);
             }
         }
         else
@@ -155,10 +199,10 @@ int main(void)
             }
         }
 
-        for (Bullet& bullet : playerBullets)
-            Move(bullet, bulletSpeed, dt);
-        for (Bullet& bullet : enemyBullets)
-            Move(bullet, bulletSpeed, dt);
+        Prune(playerBullets, enemy, obstacles, impact, damage, score, true);
+        Prune(enemyBullets, player, obstacles, impact, damage, score, false);
+        Move(playerBullets, bulletSpeed, dt);
+        Move(enemyBullets, bulletSpeed, dt);
 
         UpdateMusicStream(music);
         if (musicPaused)
@@ -197,7 +241,7 @@ int main(void)
             ImGui::Checkbox("Draw Colliders", &drawColliders);
 
             if (ImGui::Button("Play Sound"))
-                PlaySound(sound);
+                PlaySound(test);
 
             if (musicPaused)
             {
@@ -216,11 +260,16 @@ int main(void)
             rlImGuiEnd();
         }
 
-        DrawFPS(10, 10);
+        DrawText(("Score: " + to_string(score)).c_str(), 10, 10, 20, GREEN);
+        //DrawFPS(10, 10);
         EndDrawing();
     }
 
-    UnloadSound(sound);
+    UnloadSound(damage);
+    UnloadSound(impact);
+    UnloadSound(enemyFire);
+    UnloadSound(playerFire);
+    UnloadSound(test);
     UnloadMusicStream(music);
 
     UnloadTexture(texEnemy);
