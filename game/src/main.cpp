@@ -1,16 +1,12 @@
 #include "rlImGui.h"
-#include "Physics.h"
-#include "Collision.h"
-
-using namespace std;
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
 
 int main(void)
 {
-    const int screenWidth = 1280;
-    const int screenHeight = 720;
-    InitWindow(screenWidth, screenHeight, "Sunshine");
-
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
     SetTargetFPS(60);
+
     while (!WindowShouldClose())
     {
         BeginDrawing();
@@ -18,7 +14,7 @@ int main(void)
         DrawText("Hello World!", 16, 9, 20, RED);
         EndDrawing();
     }
-    CloseWindow();
 
+    CloseWindow();
     return 0;
 }
