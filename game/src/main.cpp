@@ -1,6 +1,7 @@
 #include "rlImGui.h"
 #include "Physics.h"
 #include "Collision.h"
+#include "Timer.h"
 
 #include <iostream>
 using namespace std;
@@ -35,6 +36,16 @@ void DrawTextureCircle(const Texture& texture, const Circle& circle,
     DrawTexturePro(texture, src, dst, { dst.width * 0.5f, dst.height * 0.5f }, rotation, tint);
 }
 
+struct Bullet : Circle
+{
+    Vector2 direction{};
+};
+
+void Move(Bullet& bullet, float bulletSpeed, float dt)
+{
+    bullet.position = bullet.position + bullet.direction * bulletSpeed * dt;
+}
+
 int main(void)
 {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
@@ -52,12 +63,28 @@ int main(void)
 
     Points points = LoadPoints();
     Obstacles obstacles = LoadObstacles();
-
+    
     Circle player{ {}, 50.0f };
     Circle enemy{ {}, 50.0f };
+    vector<Bullet> playerBullets;
+    vector<Bullet> enemyBullets;
+    const float bulletRadius = 10.0f;
+    const float bulletSpeed = 500.0f;
 
     size_t point = 0;
     float t = 0.0f;
+    bool enemyAttacking = false;
+
+    // Switch from following path to attacking player every 2.5 seconds
+    Timer enemyStateTimer;
+    enemyStateTimer.duration = 2.5f;
+
+    // Shoot every 0.05 seconds if in ATTACK state
+    Timer enemyAttackCooldown;
+    enemyAttackCooldown.duration = 0.05f;
+
+    Timer playerAttackCooldown;
+    playerAttackCooldown.duration = 0.25f;
 
     bool drawColliders = false;
     bool useGUI = false;
@@ -74,23 +101,66 @@ int main(void)
             player.position.x -= playerSpeed;
         if (IsKeyDown(KEY_D))
             player.position.x += playerSpeed;
-
-        enemy.position = Lerp(points[point], points[(point + 1) % points.size()], t);
-        t += dt;
-        if (t > 1.0f)
+        ResolveCollisions(player, obstacles);
+        Vector2 playerDirection = Normalize(GetMousePosition() - player.position);
+        if (IsKeyDown(KEY_SPACE))
         {
-            t = 0.0f;
-            ++point %= points.size();
+            playerAttackCooldown.Tick(dt);
+            if (playerAttackCooldown.Expired())
+            {
+                playerAttackCooldown.Reset();
+
+                Bullet bullet;
+                bullet.radius = bulletRadius;
+                bullet.direction = playerDirection;
+                bullet.position = player.position + playerDirection * (player.radius + bullet.radius);
+                playerBullets.push_back(bullet);
+            }
         }
 
-        ResolveCollisions(player, obstacles);
-        ResolveCollisions(enemy, obstacles);
+        enemyStateTimer.Tick(dt);
+        if (enemyStateTimer.Expired())
+        {
+            enemyStateTimer.Reset();
+            enemyAttacking = !enemyAttacking;
+        }
 
-        Vector2 playerDirection = Normalize(GetMousePosition() - player.position);
-        Vector2 enemyDirection = Normalize(player.position - enemy.position);
+        Vector2 enemyDirection;
+        if (enemyAttacking)
+        {
+            enemyDirection = Normalize(player.position - enemy.position);
+            enemyAttackCooldown.Tick(dt);
+            if (enemyAttackCooldown.Expired())
+            {
+                enemyAttackCooldown.Reset();
+                
+                Bullet bullet;
+                bullet.radius = bulletRadius;
+                bullet.direction = Rotate(enemyDirection, Random(-10.0f, 10.0f) * DEG2RAD);
+                bullet.position = enemy.position + enemyDirection * (enemy.radius + bullet.radius);
+                enemyBullets.push_back(bullet);
+            }
+        }
+        else
+        {
+            Vector2 currentPoint = points[point];
+            Vector2 nextPoint = points[(point + 1) % points.size()];
+            enemyDirection = Normalize(nextPoint - currentPoint);
+            enemy.position = Lerp(currentPoint, nextPoint, t);
+            t += dt;
+            if (t > 1.0f)
+            {
+                t = 0.0f;
+                ++point %= points.size();
+            }
+        }
+
+        for (Bullet& bullet : playerBullets)
+            Move(bullet, bulletSpeed, dt);
+        for (Bullet& bullet : enemyBullets)
+            Move(bullet, bulletSpeed, dt);
 
         UpdateMusicStream(music);
-
         if (musicPaused)
             PauseMusicStream(music);
         else
@@ -114,6 +184,11 @@ int main(void)
             DrawTextureCircle(texObstacle, obstacle);
         DrawTextureCircle(texPlayer, player, SignedAngle({1.0f, 0.0f}, playerDirection) * RAD2DEG);
         DrawTextureCircle(texEnemy, enemy, SignedAngle({ 1.0f, 0.0f }, enemyDirection) * RAD2DEG);
+
+        for (Bullet& bullet : playerBullets)
+            DrawCircleV(bullet.position, bullet.radius, GREEN);
+        for (Bullet& bullet : enemyBullets)
+            DrawCircleV(bullet.position, bullet.radius, RED);
 
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
         if (useGUI)
