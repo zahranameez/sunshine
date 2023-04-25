@@ -1,20 +1,17 @@
 #include "rlImGui.h"
-#include "Physics.h"
-#include "Collision.h"
-
-#include <iostream>
-
-using namespace std;
+#include "Math.h"
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 720
 
 int main(void)
 {
-    InitWindow(1280, 720, "Sunshine");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Sunshine");
     rlImGuiSetup(true);
     InitAudioDevice();
 
-    Sound sound = LoadSound("../game/assets/audio/yay.ogg");
+    bool musicPaused = false;
     Music music = LoadMusicStream("../game/assets/audio/ncs_time_leap_aero_chord.mp3");
-    bool musicPaused = true;
+    Sound sound = LoadSound("../game/assets/audio/yay.ogg");
 
     bool useGUI = false;
     SetTargetFPS(60);
@@ -27,8 +24,15 @@ int main(void)
         else
             PlayMusicStream(music);
 
+        const float tt = GetTime();
+        unsigned char r = (cosf(tt + PI * 0.33f) * 0.5f + 0.5f) * 255.0f;
+        unsigned char g = (cosf(tt + PI * 0.67f) * 0.5f + 0.5f) * 255.0f;
+        unsigned char b = (cosf(tt + PI * 1.00f) * 0.5f + 0.5f) * 255.0f;
+        unsigned char a = 255;
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
+        DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, { r, g, b, a });
 
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
         if (useGUI)
@@ -54,8 +58,9 @@ int main(void)
 
             rlImGuiEnd();
         }
-
+        
         DrawFPS(10, 10);
+        DrawText("Press ~ to open/close GUI", 10, 30, 20, GRAY);
         EndDrawing();
     }
 
