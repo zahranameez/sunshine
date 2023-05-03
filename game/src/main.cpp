@@ -11,7 +11,7 @@ int main(void)
 
     const float radius = 20.0f;
     Vector2 position{ SCREEN_WIDTH * 0.5f - radius * 0.5f, SCREEN_HEIGHT * 0.5f - radius - 0.5f };
-    Vector2 velocity{1.0f, 0.0f};
+    Vector2 velocity{0.0f, 0.0f};
 
     bool useGUI = false;
     while (!WindowShouldClose())
@@ -28,7 +28,7 @@ int main(void)
         {
             rlImGuiBegin();
             ImGui::SliderFloat2("Position", &position.x, 0.0f, SCREEN_WIDTH);
-            ImGui::SliderFloat2("Velocity", &velocity.x, -1.0f, 1.0f);
+            ImGui::SliderFloat2("Velocity", &velocity.x, -100.0f, 100.0f);
             rlImGuiEnd();
         }
 
