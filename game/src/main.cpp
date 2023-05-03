@@ -8,7 +8,8 @@ int main(void)
     rlImGuiSetup(true);
     SetTargetFPS(60);
 
-    Vector2 position{};
+    const float radius = 20.0f;
+    Vector2 position{ SCREEN_WIDTH * 0.5f - radius * 0.5f, SCREEN_HEIGHT * 0.5f - radius - 0.5f };
 
     bool useGUI = false;
     while (!WindowShouldClose())
@@ -16,7 +17,7 @@ int main(void)
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
-        DrawRectangleV(position, { 60.0f, 40.0f }, RED);
+        DrawCircleV(position, radius, RED);
 
         if (IsKeyPressed(KEY_GRAVE)) useGUI = !useGUI;
         if (useGUI)
