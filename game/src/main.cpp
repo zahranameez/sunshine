@@ -12,12 +12,15 @@ int main(void)
     const float radius = 20.0f;
     Vector2 position{ SCREEN_WIDTH * 0.5f - radius * 0.5f, SCREEN_HEIGHT * 0.5f - radius - 0.5f };
     Vector2 velocity{0.0f, 0.0f};
+    Vector2 acceleration{0.0f, 10.0};
 
     bool useGUI = false;
     while (!WindowShouldClose())
     {
         const float dt = GetFrameTime();
+        velocity = velocity + acceleration * dt;
         position = position + velocity * dt;
+        if (position.y > SCREEN_HEIGHT) position.y = 0.0f;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
@@ -34,6 +37,9 @@ int main(void)
 
         DrawFPS(10, 10);
         DrawText("Press ~ to open/close GUI", 10, 30, 20, GRAY);
+        DrawText(TextFormat("Position: (%f, %f)", position.x, position.y), 10, 50, 20, RED);
+        DrawText(TextFormat("Velocity: (%f, %f)", velocity.x, velocity.y), 10, 70, 20, RED);
+        DrawText(TextFormat("Acceleration: (%f, %f)", acceleration.x, acceleration.y), 10, 90, 20, RED);
         EndDrawing();
     }
 
