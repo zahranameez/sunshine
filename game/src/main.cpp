@@ -16,7 +16,8 @@ int main(void)
     bool useGUI = false;
     while (!WindowShouldClose())
     {
-        position = position + velocity;
+        const float dt = GetFrameTime();
+        position = position + velocity * dt;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
