@@ -15,17 +15,16 @@ int main(void)
     Vector2 acceleration{0.0f, 0.0};
 
     Vector2 target{ SCREEN_WIDTH * 0.75f, SCREEN_HEIGHT * 0.75f };
-    float speed = 100.0f;
+    float speed = 500.0f;
 
     bool useGUI = false;
     while (!WindowShouldClose())
     {
         const float dt = GetFrameTime();
+
+        acceleration = Normalize(target - position) * speed - velocity;
         velocity = velocity + acceleration * dt;
         position = position + velocity * dt;
-
-        Vector2 direction = Normalize(target - position);
-        velocity = direction * speed;
 
         if (position.x < 0.0f) position.x = SCREEN_WIDTH;
         if (position.x > SCREEN_WIDTH) position.x = 0.0f;
