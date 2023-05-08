@@ -24,7 +24,7 @@ int main(void)
 
         acceleration = Normalize(target - position) * speed - velocity;
         velocity = velocity + acceleration * dt;
-        position = position + velocity * dt;
+        position = position + velocity * dt + acceleration * dt * dt * 0.5f;
 
         if (position.x < 0.0f) position.x = SCREEN_WIDTH;
         if (position.x > SCREEN_WIDTH) position.x = 0.0f;
